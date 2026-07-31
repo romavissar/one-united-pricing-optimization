@@ -237,6 +237,14 @@ def _quality_explained_share(result: FitResult) -> float | None:
     return float(np.clip(model.rsquared, 0.0, 1.0))
 
 
+def _premium_is_hedonic_residual(frame: pd.DataFrame) -> bool:
+    """True when `rel_price_premium` is a residual rather than a cell-median ratio."""
+    column = frame.get("rel_price_premium_spec")
+    if column is None:
+        return False
+    return bool((column.astype(str) == "hedonic_residual").any())
+
+
 def _cell_count(frame: pd.DataFrame, min_cell_listings: int) -> int:
     """(submarket, list_month) cells holding at least `min_cell_listings` listings."""
     if not {"submarket", "list_month"}.issubset(frame.columns):
@@ -301,8 +309,51 @@ def run_diagnostics(
                 ),
             )
         )
+    # `beta(log_floor) > 0` is a requirement about the OLD identification
+    # variable, and it does not survive the respecification.
+    #
+    # When the premium was a ratio to a submarket-month median, that median did
+    # not adjust for floor, so a high-floor unit sat above its cell by
+    # construction and `log_floor` in the hazard carried the residual
+    # desirability of height. The sign was determinate and a negative value
+    # meant something was wrong.
+    #
+    # The premium is now a residual against a hedonic that already prices floor.
+    # `beta(log_floor)` therefore answers a different question — does a
+    # high-floor unit sell faster *at the same price relative to what its own
+    # floor predicts* — and theory does not fix that sign. A penthouse asked at
+    # the same premium over its own (higher) reference plausibly sells slower,
+    # because the pool of buyers at that price is thinner. Requiring positivity
+    # here would be demanding a sign the specification no longer implies, and on
+    # synthetic data where the generator plants floor in price but not in the
+    # hazard it fails by construction.
+    #
+    # The price coefficient's own check is untouched and remains an
+    # unconditional hard failure. This narrows one check that became
+    # meaningless; it does not relax the one the project exists for.
+    premium_is_residual = _premium_is_hedonic_residual(frame)
     for name, expect in _SIGN_REQUIREMENTS:
-        checks.append(_sign_check(name, _get(cox_result, name), expect, unconditional=False))
+        coefficient = _get(cox_result, name)
+        if name == "log_floor" and premium_is_residual:
+            checks.append(
+                Check(
+                    name="log_floor",
+                    requirement="reported, not required (premium is floor-adjusted)",
+                    value=coefficient.value if coefficient else None,
+                    status="PASS",
+                    message=(
+                        f"{coefficient.value:+.4f} — reported without a sign "
+                        "requirement. The premium is a residual against a hedonic "
+                        "that already prices floor, so this coefficient is the "
+                        "effect of height at a fixed relative price, whose sign "
+                        "theory does not determine."
+                        if coefficient
+                        else "log_floor did not enter the model"
+                    ),
+                )
+            )
+            continue
+        checks.append(_sign_check(name, coefficient, expect, unconditional=False))
 
     # Structural problems the fitter reported but did not raise on. These arrive
     # as notes because that is where survival.py records them; promoting them to

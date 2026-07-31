@@ -110,7 +110,30 @@ def _features(
     return _CACHE[key]
 
 
+def _planted(frame: pd.DataFrame) -> pd.DataFrame:
+    """Point `rel_price_premium` at the variable the generator actually planted.
+
+    `build_features` now ships the hedonic residual under that name, because on
+    real data the cell-median version is 37% unit characteristics and that
+    measurement error attenuates `beta_price` at any sample size. The synthetic
+    generator, though, drives its hazard with the cell-median premium — that is
+    what `true_beta_price` is the coefficient *on*. A recovery test exists to
+    check estimator code against a known answer, so it has to regress on the
+    variable the data-generating process used. Testing the estimator against a
+    different variable would measure the respecification, not the estimator, and
+    would fail for a reason that has nothing to do with correctness.
+
+    The respecification has its own test:
+    `test_hedonic_residual_recovers_more_of_the_planted_beta_than_the_cell_median`.
+    """
+    out = frame.copy()
+    out["rel_price_premium"] = out["cell_median_premium"]
+    out["cell_median_ppsf"] = out["cell_median_ppsf_raw"]
+    return out
+
+
 def _fit_cox(frame: pd.DataFrame, *, controlled: bool = False, fixed_effects: bool = False):
+    frame = _planted(frame)
     model = CoxDemandModel(
         covariates=CONTROLLED_COVARIATES if controlled else DEMAND_COVARIATES,
         categoricals=CONTROLLED_CATEGORICALS if controlled else ("submarket", "season"),
@@ -689,3 +712,36 @@ def test_provenance_cannot_claim_real_calibration_on_synthetic_data():
 def test_loading_a_missing_bundle_says_so(tmp_path):
     with pytest.raises(SchemaError, match="No fitted model"):
         load_bundle("miami", root=tmp_path)
+
+
+def test_hedonic_residual_recovers_more_of_the_planted_beta_than_the_cell_median(config):
+    """The respecification has to earn its place, not just be tidier.
+
+    Under `hazard_basis="latent"` the generator drives the hazard with the
+    seller's own aggressiveness while the observable price sits on top of a
+    hedonic surface — which is the real export's situation. The cell-median
+    premium then carries unit quality as measurement error and is attenuated
+    toward zero. The hedonic residual partials that quality out, so it should
+    recover strictly more of the planted coefficient.
+
+    If this ever reverses, the respecification is not doing what it claims and
+    the extra machinery should come out.
+    """
+    frame = _features(
+        config, true_beta_price=-1.6, hazard_basis="latent", building_quality_share=1.0
+    )
+
+    def fit_on(column: str) -> float:
+        work = frame.copy()
+        work["rel_price_premium"] = work[column]
+        return CoxDemandModel(covariates=DEMAND_COVARIATES).fit(work).beta_price.value
+
+    cell_median = fit_on("cell_median_premium")
+    residual = fit_on("hedonic_price_premium_ratio")
+
+    assert abs(residual) > abs(cell_median), (
+        f"hedonic residual recovered {residual:+.4f} against the cell-median "
+        f"variable's {cell_median:+.4f}; the respecification is meant to remove "
+        "measurement error, so it must recover more of the planted -1.6"
+    )
+    assert residual < 0

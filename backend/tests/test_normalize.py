@@ -112,7 +112,12 @@ def test_floor_parsing_rules() -> None:
 def test_status_and_money_zip() -> None:
     assert normalize_status("Sold/Closed") == "SOLD"
     assert normalize_status("WDN") == "WITHDRAWN"
-    assert normalize_status("Active Under Contract") == "PENDING"
+    # A listing "Active Under/With Contract" is still on the market taking
+    # backups: the spell has not ended, so it is right-censored at the export
+    # date rather than scored as a sale. `Pending` proper remains an event.
+    assert normalize_status("Active Under Contract") == "ACTIVE"
+    assert normalize_status("Active With Contract") == "ACTIVE"
+    assert normalize_status("Pending") == "PENDING"
     assert coerce_money("($1,234)") == -1234.0
     assert coerce_money("$1,250,000") == 1250000.0
     assert coerce_zip("33131-1234") == "33131"
@@ -140,9 +145,14 @@ def test_fixture_floor_sources_and_non_sold() -> None:
     assert bool(row_ph["is_penthouse"]) is True
     assert row_ph["floor_source"] == "parsed"
 
-    # Reported floor > stories → missing (A1014)
+    # Reported floor > stories is adjudicated, not blanket-nulled (A1014).
+    # The row reports floor 22 in a building of 12, and its unit number is
+    # 2201 — which corroborates the floor and impeaches the height. The old
+    # gate discarded the floor here, throwing away good data against a field
+    # that was itself wrong. See `resolve_floor`.
     row_gate = frame.loc[frame["mls_number"] == "A1014"].iloc[0]
-    assert row_gate["floor_source"] == "missing"
+    assert row_gate["floor"] == 22
+    assert row_gate["floor_source"] == "reported"
 
     non_sold = int((frame["status"] != "SOLD").sum())
     assert non_sold > 0

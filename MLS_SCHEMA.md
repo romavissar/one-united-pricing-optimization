@@ -50,7 +50,48 @@ honestly on what was missing.
 | `list_agent_name` | str | OPTIONAL | Helps separate builder-direct from resale. |
 | `list_office_name` | str | OPTIONAL | Same. |
 | `waterfront` | bool | OPTIONAL | View proxy when no view field exists. |
-| `view_description` | str | OPTIONAL | Free text; map to ordinal via keywords. |
+| `view_description` | str | OPTIONAL | **Multi-valued**, comma separated. See below. |
+| `status_change_date` | date | OPTIONAL | Last record movement. Its maximum is the export snapshot. Never a terminal date for a live listing. |
+| `waterfront_description` | str | OPTIONAL | Multi-valued. `Ocean Front`, `Bay Front`, … |
+| `restrictions` | str | OPTIONAL | Multi-valued. Rental rules drive Miami condo value. |
+| `parking_description` | str | OPTIONAL | Multi-valued. |
+| `amenities` | str | OPTIONAL | Multi-valued, very high cardinality; building-level. |
+| `min_lease_days` | int | OPTIONAL | Minimum lease term; a legal attribute of the unit. |
+| `furnished_info` | str | OPTIONAL | Part of what is being sold. |
+| `special_assessment` | bool | OPTIONAL | Material in FL post-Surfside. |
+| `association_type` | str | OPTIONAL | |
+| `is_reo` | bool | OPTIONAL | Bank-owned. **Excluded from the fit.** |
+| `is_short_sale` | bool | OPTIONAL | **Excluded from the fit.** Blank stays blank. |
+| `terms_considered` | str | OPTIONAL | Captured but **deliberately not a hedonic control** — see below. |
+| `occupancy_information` | str | OPTIONAL | Same. |
+| `special_information` | str | OPTIONAL | Same. |
+
+### Multi-valued fields
+
+`Unit View` and its relatives arrive as comma-separated lists — `"Bay, Skyline
+View, Water View"` is three facts about the unit, not one categorical level. As a
+category it has 1,144 distinct values on the 2023–2026 pull and is useless; split
+into atoms it has **17**, and `Direct Ocean` (10.7% of listings) is a different and
+far more valuable thing from `Ocean View` (29.9%). Split on commas, keep one
+indicator per token above ~1% frequency, and encode "no value at all" as its own
+indicator rather than dropping the row.
+
+### What may not enter the hedonic
+
+The identification variable is the residual from a hedonic on log asking price, so
+the hedonic's right-hand side decides what is left in it. Three rules:
+
+1. **Nothing post-listing** — DOM, CDOM, Current Price, Sale Price, and every
+   terminal date are functions of the outcome.
+2. **Nothing about the seller** — `Terms Considered`, `Occupancy Information` and
+   `Special Information` are available at listing time and are not outcome
+   variables, but they describe the seller's situation rather than the asset. The
+   residual is *supposed* to contain seller behaviour; a control that absorbs seller
+   motivation strips out the exact variation `β_price` measures. Excluding them is
+   deliberate, and adding them would look like an improvement while making the
+   estimate worse.
+3. **Fit on every listing, not just sold ones** — this models what sellers ask, not
+   what buyers pay. Restricting to closed sales selects on the outcome.
 
 ### Derived (computed, never read from source)
 
@@ -138,8 +179,8 @@ value, and check prefixes since MLS systems abbreviate.
 | `EXPIRED` | `Expired`, `X`, `EXP` |
 | `WITHDRAWN` | `Withdrawn`, `W`, `WDN`, `Temporarily Off Market`, `Temp Off Market`, `Hold` |
 | `CANCELED` | `Canceled`, `Cancelled`, `C`, `CAN`, `Terminated` |
-| `ACTIVE` | `Active`, `A`, `ACT`, `Coming Soon`, `New` |
-| `PENDING` | `Pending`, `P`, `Active Under Contract`, `Active With Contract`, `Backup`, `Contingent` |
+| `ACTIVE` | `Active`, `A`, `ACT`, `Coming Soon`, `New`, `Active Under Contract`, `Active With Contract`, `Backup`, `Contingent` |
+| `PENDING` | `Pending`, `P` |
 
 **Handling by status:**
 - `SOLD` → the event. `event_sold = 1`.
@@ -148,8 +189,14 @@ value, and check prefixes since MLS systems abbreviate.
 - `PENDING` → treat as `SOLD` for survival purposes if `pending_date` exists (the
   demand event is the buyer committing, not the deed recording). Flag it so this choice
   is auditable.
-- `ACTIVE` → right-censored at the export date. Include, but they carry less information
-  because their durations are all truncated at the same point.
+- `ACTIVE` → right-censored **at the export date**, measured from the listing's own
+  list date. Not at any status-change date: a status change on a live listing is a
+  price cut or a re-list, not the end of the spell.
+- `Active With Contract` / `Active Under Contract` / `Backup` / `Contingent` →
+  **`ACTIVE`, not `PENDING`.** A contract exists but the listing is still on the
+  market taking backups and the spell has not ended, so the honest treatment is
+  right-censoring. Scoring these as sales converts still-open listings into
+  completed ones and biases the hazard upward — 217 rows on the 2023–2026 pull.
 
 ---
 
@@ -192,6 +239,35 @@ Priority order — use the first that yields a positive, plausible value:
 4. Any status → reported `days_on_market`
 5. `ACTIVE` → `export_date − list_date`
 
+### Recovering a missing `list_date`
+
+Where the export leaves it blank, derive it as `terminal date − days_on_market` and
+mark `list_date_source = "derived_from_dom"`. Blanks are rarely random: on the
+2023–2026 pull `List Date` is null for 100% of six live and off-market statuses and
+0% of the rest, so dropping those rows selects the panel on the outcome.
+
+The anchor depends on whether the clock has stopped:
+
+| listing state | anchor | validated exactness |
+|---|---|---|
+| sold / under contract | `pending_date` | 93.6% |
+| terminated (cancelled, expired, withdrawn) | `off_market_date` | 90.0–90.3% |
+| **still live** (`ACTIVE`) | **the export snapshot** | 97.6% in-quarter |
+
+Never `close_date` (1.3% exact) — DOM stops at buyer commitment, not at closing, so
+escrow is not time on market. Never `status_change_date` for a live listing (25.1%) —
+that is when the record last moved, not when the listing started.
+
+The export snapshot is `max(status_change_date)`: that column is 100% filled and
+cannot postdate the pull. Do **not** use "the latest date anywhere in the file" —
+`off_market_date` carries scheduled future terminations and runs months past the
+actual pull, which would push every recovered date early and censor every live
+listing late.
+
+Where the export arrives as one file per quarter, validate every derived date against
+its own file's quarter and leave outliers missing rather than carrying a
+plausible-looking date into the wrong comps cell.
+
 **Validation:** drop rows where `duration_days <= 0` or `> 1095` (3 years) and log the
 count. Record which rule produced each value in a `duration_source` column so the
 survival fit can be re-run on a restricted, higher-quality subset if needed.
@@ -213,7 +289,12 @@ survival fit can be re-run on a restricted, higher-quality subset if needed.
   implausible for a condo and null it with a logged reason.
 - **HOA frequency:** normalize to a monthly figure — `Annually` → `/12`,
   `Quarterly` → `/3`, `Semi-Annually` → `/6`, `Monthly` → as-is. Store both
-  `hoa_monthly` (normalized) and the original frequency.
+  `hoa_monthly` (normalized) and the original frequency. Where no frequency column
+  exists, **do not guess and do not null the tails**: on the 2023–2026 pull
+  `Association Fee` overlaps `Maintenance Charge/Month` on 6,943 rows with a median
+  ratio of exactly 1.00, which settles that the field is already monthly. A high fee
+  in a full-service oceanfront tower is a real fee carrying real amenity signal, and
+  discarding it on suspicion throws that signal away.
 - **ZIP:** keep as **string**, zero-pad to 5, truncate ZIP+4 to the first 5.
 
 ---

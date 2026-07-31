@@ -54,7 +54,7 @@ def main() -> int:
 
     # ---------------------------------------------------------- 1 and 2
     rule("REAL EXPORT — numbers 1 and 2")
-    ingested = ingest_mls(market="miami")
+    ingested = ingest_mls(market="miami")  # 15 quarterly files
     feats = build_features(ingested.frame, config).frame
 
     model = CoxDemandModel(covariates=DEMAND_COVARIATES)

@@ -69,8 +69,13 @@ def test_smoke_signal_on_synthetic_data(rich_features, capsys) -> None:
     report = rich_features.report
     stats = report.rel_price_premium
 
-    assert abs(stats["median"]) < 1e-9
+    # The premium is now a hedonic residual, so it is centred by least squares
+    # rather than by construction: its mean is zero to machine precision and its
+    # median is near zero but not identically so. The old variable — a ratio to
+    # a cell median — had an exactly-zero median and a mean pulled positive by
+    # the skew of prices, which is the opposite pattern.
     assert abs(stats["mean"]) < 0.05, stats["mean"]
+    assert abs(stats["median"]) < 0.02, stats["median"]
 
     corr = report.corr_rel_price_premium_event_sold
     assert corr is not None and corr < 0, corr
@@ -179,24 +184,33 @@ def test_missing_inputs_produce_nulls_not_substitutes(config) -> None:
     assert pd.isna(frame.loc[4, "season"])
 
 
-def test_implausible_hoa_is_nulled_and_marked(config) -> None:
+def test_hoa_is_taken_at_face_value_now_the_field_is_confirmed_monthly(config) -> None:
+    """The old plausibility band nulled real fees and is gone.
+
+    It existed because the previous export carried no frequency column, so a
+    high monthly fee could not be told from an annual one and 238 rows were
+    discarded on suspicion. The quarterly export settles it: Association Fee
+    overlaps Maintenance Charge/Month on 6,943 rows with a median ratio of
+    exactly 1.00. A $6/sqft/month fee in a full-service oceanfront tower is a
+    real fee carrying real amenity signal, and nulling it was throwing that
+    signal away. What remains is arithmetic — a rate needs a positive area, and
+    a negative fee is not a fee.
+    """
     rows = [
-        {"hoa_monthly": 1500.0, "living_area_sqft": 1000.0},   # $1.50/sqft/mo
-        {"hoa_monthly": 18_692.0, "living_area_sqft": 1000.0},  # annual fee mislabelled
-        {"hoa_monthly": 0.0, "living_area_sqft": 1000.0},
+        {"hoa_monthly": 1500.0, "living_area_sqft": 1000.0},    # $1.50/sqft/mo
+        {"hoa_monthly": 18_692.0, "living_area_sqft": 1000.0},  # $18.69, kept
+        {"hoa_monthly": 0.0, "living_area_sqft": 1000.0},       # a genuine $0
+        {"hoa_monthly": -50.0, "living_area_sqft": 1000.0},     # not a fee
     ] + [{} for _ in range(8)]
-    result = build_features(_frame(rows), config, min_cell_listings=8)
-    frame = result.frame
+    frame = build_features(_frame(rows), config, min_cell_listings=8).frame
 
     assert frame.loc[0, "hoa_per_sqft"] == pytest.approx(1.5)
     assert frame.loc[0, "hoa_per_sqft_source"] == "reported"
-    assert pd.isna(frame.loc[1, "hoa_per_sqft"])
-    assert frame.loc[1, "hoa_per_sqft_source"] == "implausible"
-    assert pd.isna(frame.loc[2, "hoa_per_sqft"])
-    assert frame.loc[2, "hoa_per_sqft_source"] == "implausible"
-
-    assert result.report.hoa_units_suspect == 2
-    assert any("HOA UNITS SUSPECT" in w for w in result.report.warnings)
+    assert frame.loc[1, "hoa_per_sqft"] == pytest.approx(18.692)
+    assert frame.loc[1, "hoa_per_sqft_source"] == "reported"
+    assert frame.loc[2, "hoa_per_sqft"] == pytest.approx(0.0)
+    assert pd.isna(frame.loc[3, "hoa_per_sqft"])
+    assert frame.loc[3, "hoa_per_sqft_source"] == "negative"
 
 
 def test_inventory_competition_counts_entries_and_excludes_self(config) -> None:

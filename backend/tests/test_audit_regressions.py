@@ -72,7 +72,7 @@ def test_f03_list_date_is_recovered_from_terminal_minus_dom():
             "days_on_market": [50, 100, 40, 30],
         }
     )
-    listed, source, recovered = reconstruct_list_date(frame)
+    listed, source, recovered, _rejected = reconstruct_list_date(frame)
 
     assert recovered == 2
     assert source.tolist() == ["reported", "derived_from_dom", "derived_from_dom", "missing"]
@@ -95,7 +95,7 @@ def test_f03_recovered_rows_carry_a_source_marker_not_a_silent_value():
             "days_on_market": [10],
         }
     )
-    _, source, _ = reconstruct_list_date(frame)
+    _, source, _, _ = reconstruct_list_date(frame)
     assert source.iloc[0] == "derived_from_dom"
 
 

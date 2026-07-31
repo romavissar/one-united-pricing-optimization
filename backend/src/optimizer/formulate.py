@@ -413,6 +413,7 @@ def build_revenue_tensor(
     probability = np.full((n_units, n_phases, n_levels), np.nan, dtype="float64")
     premium = np.full((n_units, n_phases, n_levels), np.nan, dtype="float64")
     premium_model = getattr(model, "premium_model", None)
+    notes: list[str] = list(ladder.notes)
 
     # Clamp the ladder to the range the coefficient is evidence about, before
     # any probability is computed. A Cox linear predictor extrapolates without
@@ -428,6 +429,7 @@ def build_revenue_tensor(
     support = getattr(model, "premium_support", None)
     ladder_levels = ladder.levels_ppsf
     clamped_cells = 0
+    support_excluded: list[ExcludedUnit] = []
     if support is not None and premium_model is not None:
         references = np.column_stack([
             premium_model.predict_reference_ppsf(
@@ -437,17 +439,76 @@ def build_revenue_tensor(
         ])
         with np.errstate(invalid="ignore"):
             reference = np.nanmean(references, axis=1)
-        low = reference * (1.0 + support.p1)
-        high = reference * (1.0 + support.p99)
-        usable_bounds = np.isfinite(low) & np.isfinite(high) & (high > low)
-        if usable_bounds.any():
+        support_low = reference * (1.0 + support.p1)
+        support_high = reference * (1.0 + support.p99)
+        # Intersect with the band the ladder already enforces. That band's floor
+        # is the developer's cost basis plus margin — a business rule, not an
+        # estimate — so it wins over the statistical band: clamping a price
+        # below it would recommend selling under basis in order to stay inside
+        # the evidence. Where the two bands do not overlap at all, the unit
+        # cannot be priced both above its basis and inside the range the
+        # coefficient is evidence about, and it is excluded with that stated
+        # rather than priced on one side of the contradiction.
+        floor = np.maximum(ladder.p_floor_ppsf, support_low)
+        ceiling = np.minimum(ladder.p_ceiling_ppsf, support_high)
+        overlaps = np.isfinite(floor) & np.isfinite(ceiling) & (ceiling > floor)
+        if overlaps.any():
             proposed = np.clip(
                 ladder_levels,
-                np.where(usable_bounds, low, -np.inf)[:, None],
-                np.where(usable_bounds, high, np.inf)[:, None],
+                np.where(overlaps, floor, -np.inf)[:, None],
+                np.where(overlaps, ceiling, np.inf)[:, None],
             )
             clamped_cells = int((np.abs(proposed - ladder_levels) > 1e-9).sum())
             ladder_levels = proposed
+        unsupported = np.isfinite(support_low) & np.isfinite(support_high) & ~overlaps
+        if unsupported.all():
+            # Every unit fails: that is not sixty separate problems, it is one
+            # problem with the two reference surfaces. The price band comes from
+            # the close-price hedonic, which uses only covariates a developer's
+            # inventory actually carries; the premium reference comes from the
+            # list-price hedonic, which is fitted on MLS listings and whose
+            # amenity vocabulary — view, waterfront, parking, restrictions — the
+            # inventory does not have. Scoring an inventory unit therefore holds
+            # most of that surface at its fit-time mean and the prediction
+            # regresses toward the middle of the MLS sample, which for this
+            # inventory sits about a third below the comps band.
+            #
+            # Excluding the whole inventory would be a wrong answer stated
+            # confidently. The clamp stands down, the plan is produced against
+            # the comps band, and the caveat says the extrapolation guard could
+            # not be applied and why.
+            clamped_cells = 0
+            support_excluded = []
+            notes.append(
+                "PREMIUM REFERENCE NOT COMPARABLE TO THE COMPS BAND — the ladder "
+                f"spans ${np.nanmedian(ladder.p_floor_ppsf):,.0f}-"
+                f"${np.nanmedian(ladder.p_ceiling_ppsf):,.0f}/sqft at the median unit "
+                f"while the range beta_price is evidence about maps to "
+                f"${np.nanmedian(support_low):,.0f}-${np.nanmedian(support_high):,.0f}"
+                "/sqft, and the two do not overlap for any unit. The price band is "
+                "built from the close-price hedonic on covariates the inventory "
+                "carries; the premium reference is the list-price hedonic, most of "
+                "whose amenity controls the inventory does not carry and which "
+                "therefore falls back to fit-time means. The ladder was NOT clamped "
+                "and the recommended prices are NOT verified against the fitted "
+                "support. Treat every sale probability here as an extrapolation "
+                "until the inventory schema carries the hedonic's covariates."
+            )
+            logger.warning(notes[-1])
+        elif unsupported.any():
+            support_excluded = [
+                ExcludedUnit(
+                    ladder.unit_ids[i],
+                    "outside_fitted_support",
+                    f"this unit's price band (${ladder.p_floor_ppsf[i]:,.0f}-"
+                    f"${ladder.p_ceiling_ppsf[i]:,.0f}/sqft) does not overlap the range "
+                    f"beta_price is evidence about (${support_low[i]:,.0f}-"
+                    f"${support_high[i]:,.0f}/sqft). Pricing it would mean either "
+                    "selling below the cost basis or extrapolating the demand model, "
+                    "so it is left unpriced rather than guessed.",
+                )
+                for i in np.flatnonzero(unsupported)
+            ]
 
     for j, phase in enumerate(spec.phases):
         features = build_phase_features(ordered, phase, spec)
@@ -502,6 +563,11 @@ def build_revenue_tensor(
         discounted = release_discounted
 
     scorable = np.isfinite(probability).all(axis=(1, 2))
+    if support_excluded:
+        unsupported_ids = {e.unit_id for e in support_excluded}
+        scorable = scorable & np.array(
+            [uid not in unsupported_ids for uid in ladder.unit_ids]
+        )
     excluded = [
         ExcludedUnit(
             ladder.unit_ids[i],
@@ -523,7 +589,6 @@ def build_revenue_tensor(
     releasable = _construction_gate(ordered.iloc[keep], spec)
 
     support = getattr(model, "premium_support", None)
-    notes = list(ladder.notes)
 
     # A non-parametric baseline hazard is only identified over the durations the
     # fit actually saw. lifelines holds the last value past the final event
@@ -601,7 +666,7 @@ def build_revenue_tensor(
         ),
         premium_support=support,
         horizon_days=spec.horizon_days,
-        excluded=(*ladder.excluded, *excluded),
+        excluded=(*ladder.excluded, *support_excluded, *excluded),
         notes=notes,
     )
 
