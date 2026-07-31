@@ -1,0 +1,27 @@
+# Schema stub only — Bucharest data pipeline is out of scope this pass.
+# Values TBD when the Romania market is built out.
+market: bucharest
+currency: RON
+area_unit: sqm
+price_unit: ron_per_sqm
+
+submarkets: {}
+
+view_categories: []
+
+defaults:
+  discount_rate_annual: null
+  presale_lead_months: null
+  horizon_days: null
+  price_ladder_levels: null
+  min_cell_listings: null
+  crowding_lambda: null
+  monte_carlo_draws: null
+
+filters:
+  min_list_price: null
+  exclude_sale_types: []
+  property_types: []
+
+notes:
+  status: "STUB — do not use for optimization in this pass"

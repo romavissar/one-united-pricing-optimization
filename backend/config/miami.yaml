@@ -1,0 +1,99 @@
+market: miami
+currency: USD
+area_unit: sqft
+price_unit: usd_per_sqft
+
+submarkets:
+  brickell:
+    zips: ["33129", "33130", "33131"]
+    tier: 1
+  edgewater:
+    zips: ["33137", "33138"]
+    tier: 2
+  downtown:
+    zips: ["33132"]
+    tier: 2
+  miami_beach:
+    zips: ["33139", "33140", "33141"]
+    tier: 1
+  sunny_isles:
+    zips: ["33160"]
+    tier: 1
+  coconut_grove:
+    zips: ["33133"]
+    tier: 1
+  surfside_bal_harbour:
+    zips: ["33154"]
+    tier: 0
+  aventura:
+    zips: ["33180"]
+    tier: 2
+  # Added so the real MLS export clears the 5% SUBMARKET COVERAGE GAP warn.
+  # Geography from ZIP + Complex Name in PRICING_MODEL_export.csv.
+  key_biscayne:
+    zips: ["33149"]
+    tier: 0
+  fisher_island:
+    zips: ["33109"]
+    tier: 0
+  coral_gables:
+    zips: ["33134", "33145", "33146"]
+    tier: 1
+  doral:
+    zips: ["33178", "33166"]
+    tier: 2
+  north_miami:
+    zips: ["33181"]
+    tier: 2
+  pinecrest_dadeland:
+    zips: ["33156", "33143"]
+    tier: 2
+
+# Ordinal, higher = better; premiums are FIT, not fixed
+view_categories:
+  - direct_ocean
+  - bay_direct
+  - ocean_partial
+  - bay_partial
+  - intracoastal
+  - city_skyline
+  - pool_garden
+  - urban_street
+  - obstructed
+
+defaults:
+  discount_rate_annual: 0.12  # annual decimal rate
+  presale_lead_months: 24
+  horizon_days: 180
+  price_ladder_levels: 15
+  min_cell_listings: 8  # (submarket, month) cell threshold
+  crowding_lambda: 0.30
+  monte_carlo_draws: 10000
+  # Flip to true ONLY after a human has inspected the real-MLS fit and the
+  # β_price CI excludes zero. Never set automatically by a successful fit —
+  # PROJECT_BRIEF §5 / AGENTS.md §4. This is the single explicit config change
+  # that clears the non-dismissible "illustrative" banner.
+  is_calibrated_on_real_data: false
+  # Width of the comps-based price band the hedonic surface hands the
+  # optimizer, in residual standard deviations either side of the predicted
+  # $/sqft. A bound on the search, not an estimate: the surface and its
+  # residual spread are both fitted.
+  hedonic_bound_sd_multiple: 1.5
+  min_hedonic_sales: 50
+  # Floor the fitted premium curve is quoted against; premium(1) = 0 means
+  # "relative to a first-floor unit". A reporting convention, not an estimate.
+  floor_premium_reference_floor: 1
+  # Developer's minimum gross margin over all-in cost basis. A business
+  # constraint the developer sets, not something fitted: it says "do not
+  # search below this", and it is the lower half of the optimizer's price
+  # bound wherever it binds above the comps floor.
+  min_margin_over_cost: 0.15
+
+filters:
+  min_list_price: 400000
+  exclude_sale_types: ["foreclosure", "short_sale", "auction", "reo"]
+  property_types: ["condo", "co_op"]
+
+notes:
+  floor_premium: "alpha and gamma are ESTIMATED per project from hedonic fit; no defaults"
+  hoa_effect: "model via hoa_per_sqft covariate; FL insurance costs make this material"
