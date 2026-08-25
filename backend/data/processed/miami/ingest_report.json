@@ -1,0 +1,970 @@
+{
+  "files": [
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q1-2023.csv",
+      "rows": 3108
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q1-2024.csv",
+      "rows": 3891
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q1-2025.csv",
+      "rows": 4300
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q1-2026.csv",
+      "rows": 3636
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q2-2023.csv",
+      "rows": 2870
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q2-2024.csv",
+      "rows": 3455
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q2-2025.csv",
+      "rows": 3559
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q2-2026.csv",
+      "rows": 3251
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q3-2023.csv",
+      "rows": 2935
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q3-2024.csv",
+      "rows": 3466
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q3-2025.csv",
+      "rows": 3078
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q4-2023.csv",
+      "rows": 3093
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q4-2024.csv",
+      "rows": 3450
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/Q4-2025.csv",
+      "rows": 3161
+    },
+    {
+      "path": "/Users/school/one-united/backend/data/raw/mls/~Q3-2026.csv",
+      "rows": 953
+    }
+  ],
+  "rows_in": 48206,
+  "rows_out": 47310,
+  "mapping": {
+    "matched": [
+      "amenities",
+      "association_type",
+      "baths_full",
+      "baths_half",
+      "beds",
+      "building_name",
+      "close_date",
+      "close_price",
+      "cumulative_days_on_market",
+      "days_on_market",
+      "furnished_info",
+      "hoa_monthly",
+      "is_reo",
+      "is_short_sale",
+      "last_list_price",
+      "list_date",
+      "living_area_sqft",
+      "min_lease_days",
+      "mls_number",
+      "occupancy_information",
+      "off_market_date",
+      "original_list_price",
+      "parking_description",
+      "pending_date",
+      "property_type",
+      "restrictions",
+      "special_assessment",
+      "special_information",
+      "status",
+      "status_change_date",
+      "street_address",
+      "subdivision",
+      "tax_annual",
+      "terms_considered",
+      "total_stories",
+      "unit_floor",
+      "unit_number",
+      "view_description",
+      "waterfront",
+      "waterfront_description",
+      "year_built",
+      "zip_code"
+    ],
+    "matched_count": 42,
+    "required_missing": [],
+    "important_missing": [
+      "sale_type"
+    ],
+    "unmapped_source_columns": {
+      "List Price": 48206,
+      "MLS": 48206,
+      "Last Status": 42296,
+      "Expiration Date": 40815,
+      "Maintenance Charge/Month": 7565,
+      "Main Living Area": 5243
+    },
+    "source_to_canonical": {
+      "ML#": "mls_number",
+      "Status": "status",
+      "Original List Price": "original_list_price",
+      "Current Price": "last_list_price",
+      "Sale Price": "close_price",
+      "Closing Date": "close_date",
+      "Pending Date": "pending_date",
+      "Off Market Date": "off_market_date",
+      "Status Change Date": "status_change_date",
+      "CDOM (Days on Market)": "cumulative_days_on_market",
+      "DOM": "days_on_market",
+      "SqFt Liv Area": "living_area_sqft",
+      "#Beds": "beds",
+      "#FBaths": "baths_full",
+      "#HBaths": "baths_half",
+      "Address Line": "street_address",
+      "Subdivision/Complex/Bldg.": "subdivision",
+      "Restrictions": "restrictions",
+      "Furnished Info (List)": "furnished_info",
+      "Occupancy Information": "occupancy_information",
+      "Minimum # of Days for Lease": "min_lease_days",
+      "REO": "is_reo",
+      "Short Sale": "is_short_sale",
+      "Terms Considered": "terms_considered",
+      "Complex Name": "building_name",
+      "Zip Code": "zip_code",
+      "Year Built": "year_built",
+      "Association Fee": "hoa_monthly",
+      "Waterfront Property (Y/N)": "waterfront",
+      "Total Floors In Building": "total_stories",
+      "Unit Floor Location": "unit_floor",
+      "Unit Number": "unit_number",
+      "Waterfront Description": "waterfront_description",
+      "Amenities": "amenities",
+      "Tax Amount": "tax_annual",
+      "Special Assessment YN": "special_assessment",
+      "Special Information": "special_information",
+      "Type of Association": "association_type",
+      "Property Type": "property_type",
+      "Unit View": "view_description",
+      "Parking Description": "parking_description",
+      "List Date": "list_date"
+    }
+  },
+  "types": {
+    "mls_number": {
+      "null_count": 1,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "status": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "original_list_price": {
+      "null_count": 2,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "list_date": {
+      "null_count": 203,
+      "null_rate": 0.0043,
+      "dtype": "datetime64[ns]"
+    },
+    "living_area_sqft": {
+      "null_count": 890,
+      "null_rate": 0.0188,
+      "dtype": "float64"
+    },
+    "zip_code": {
+      "null_count": 1,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "close_price": {
+      "null_count": 31517,
+      "null_rate": 0.6662,
+      "dtype": "float64"
+    },
+    "close_date": {
+      "null_count": 31517,
+      "null_rate": 0.6662,
+      "dtype": "datetime64[ns]"
+    },
+    "last_list_price": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "days_on_market": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "off_market_date": {
+      "null_count": 6204,
+      "null_rate": 0.1311,
+      "dtype": "datetime64[ns]"
+    },
+    "beds": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "baths_full": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "street_address": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "unit_number": {
+      "null_count": 119,
+      "null_rate": 0.0025,
+      "dtype": "object"
+    },
+    "building_name": {
+      "null_count": 771,
+      "null_rate": 0.0163,
+      "dtype": "object"
+    },
+    "property_type": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "sale_type": {
+      "null_count": 47310,
+      "null_rate": 1.0,
+      "dtype": "object"
+    },
+    "unit_floor": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "cumulative_days_on_market": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "pending_date": {
+      "null_count": 30898,
+      "null_rate": 0.6531,
+      "dtype": "datetime64[ns]"
+    },
+    "status_change_date": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "datetime64[ns]"
+    },
+    "baths_half": {
+      "null_count": 2577,
+      "null_rate": 0.0545,
+      "dtype": "float64"
+    },
+    "year_built": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "new_construction": {
+      "null_count": 47310,
+      "null_rate": 1.0,
+      "dtype": "object"
+    },
+    "total_stories": {
+      "null_count": 18,
+      "null_rate": 0.0004,
+      "dtype": "float64"
+    },
+    "hoa_monthly": {
+      "null_count": 71,
+      "null_rate": 0.0015,
+      "dtype": "float64"
+    },
+    "hoa_frequency": {
+      "null_count": 47310,
+      "null_rate": 1.0,
+      "dtype": "object"
+    },
+    "tax_annual": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "subdivision": {
+      "null_count": 771,
+      "null_rate": 0.0163,
+      "dtype": "object"
+    },
+    "city": {
+      "null_count": 47310,
+      "null_rate": 1.0,
+      "dtype": "object"
+    },
+    "list_agent_name": {
+      "null_count": 47310,
+      "null_rate": 1.0,
+      "dtype": "object"
+    },
+    "list_office_name": {
+      "null_count": 47310,
+      "null_rate": 1.0,
+      "dtype": "object"
+    },
+    "waterfront": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "bool"
+    },
+    "view_description": {
+      "null_count": 1671,
+      "null_rate": 0.0353,
+      "dtype": "object"
+    },
+    "waterfront_description": {
+      "null_count": 17291,
+      "null_rate": 0.3655,
+      "dtype": "object"
+    },
+    "restrictions": {
+      "null_count": 166,
+      "null_rate": 0.0035,
+      "dtype": "object"
+    },
+    "parking_description": {
+      "null_count": 400,
+      "null_rate": 0.0085,
+      "dtype": "object"
+    },
+    "amenities": {
+      "null_count": 202,
+      "null_rate": 0.0043,
+      "dtype": "object"
+    },
+    "terms_considered": {
+      "null_count": 21,
+      "null_rate": 0.0004,
+      "dtype": "object"
+    },
+    "occupancy_information": {
+      "null_count": 1308,
+      "null_rate": 0.0276,
+      "dtype": "object"
+    },
+    "furnished_info": {
+      "null_count": 29597,
+      "null_rate": 0.6256,
+      "dtype": "object"
+    },
+    "special_assessment": {
+      "null_count": 32036,
+      "null_rate": 0.6772,
+      "dtype": "object"
+    },
+    "special_information": {
+      "null_count": 23905,
+      "null_rate": 0.5053,
+      "dtype": "object"
+    },
+    "min_lease_days": {
+      "null_count": 1990,
+      "null_rate": 0.0421,
+      "dtype": "object"
+    },
+    "association_type": {
+      "null_count": 1292,
+      "null_rate": 0.0273,
+      "dtype": "object"
+    },
+    "is_reo": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "is_short_sale": {
+      "null_count": 950,
+      "null_rate": 0.0201,
+      "dtype": "object"
+    },
+    "floor": {
+      "null_count": 124,
+      "null_rate": 0.0026,
+      "dtype": "float64"
+    },
+    "floor_source": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "list_ppsf": {
+      "null_count": 905,
+      "null_rate": 0.0191,
+      "dtype": "float64"
+    },
+    "duration_days": {
+      "null_count": 165,
+      "null_rate": 0.0035,
+      "dtype": "float64"
+    },
+    "submarket": {
+      "null_count": 1433,
+      "null_rate": 0.0303,
+      "dtype": "object"
+    },
+    "event_sold": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    }
+  },
+  "date_formats": {
+    "list_date": {
+      "%m/%d/%Y": 40815
+    },
+    "pending_date": {
+      "%Y-%m-%d": 16657
+    },
+    "close_date": {
+      "%Y-%m-%d": 16014
+    },
+    "off_market_date": {
+      "%Y-%m-%d": 41810
+    },
+    "status_change_date": {
+      "%Y-%m-%d %H:%M:%S": 48206
+    }
+  },
+  "filters": {
+    "distressed_reo": 402,
+    "distressed_short_sale": 80,
+    "below_min_list_price": 390,
+    "bad_duration": 24
+  },
+  "status_distribution": {
+    "SOLD": 15793,
+    "CANCELED": 12894,
+    "EXPIRED": 11457,
+    "ACTIVE": 6209,
+    "WITHDRAWN": 574,
+    "PENDING": 383
+  },
+  "floor_source_distribution": {
+    "reported": 46445,
+    "parsed": 764,
+    "missing": 101
+  },
+  "floor_rejected_by_stories": 68,
+  "submarket_coverage": {
+    "rows_with_submarket": 45877,
+    "rows_without_submarket": 1433,
+    "unmapped_rate": 0.0303,
+    "top_unmapped_zips": {
+      "33127": 155,
+      "33125": 150,
+      "33126": 74,
+      "33172": 71,
+      "33183": 70,
+      "33158": 64,
+      "33155": 62,
+      "33174": 60,
+      "33196": 59,
+      "33176": 57
+    }
+  },
+  "identification": {
+    "sold_count": 15793,
+    "non_sold_count": 31517,
+    "censored_expired_withdrawn_canceled": 24925,
+    "active_count": 6209,
+    "pending_count": 383,
+    "pending_treated_as_sold": 383,
+    "event_sold_count": 16176,
+    "min_cell_listings": 8,
+    "rel_price_premium": null,
+    "note": "rel_price_premium is computed in Phase 2 (features). Identification IQR check runs after feature engineering.",
+    "submarket_month_cells_ge_min": 534,
+    "usable_rows_required_duration_submarket": 44745
+  },
+  "sampling": {
+    "list_date_min": "2023-01-01",
+    "list_date_max": "2026-07-31",
+    "list_date_span_days": 1307,
+    "terminal_date_min": "2021-04-01",
+    "terminal_date_max": "2026-10-30",
+    "terminal_date_span_days": 2038,
+    "active_listings": 6209,
+    "rows_started_before_terminal_window": 0,
+    "completed_spell_share": 0.8713,
+    "status_runs": [
+      {
+        "status": "Active",
+        "n": 7
+      },
+      {
+        "status": "Cancelled",
+        "n": 846
+      },
+      {
+        "status": "Closed",
+        "n": 1567
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 1
+      },
+      {
+        "status": "Withdrawn",
+        "n": 1
+      },
+      {
+        "status": "Expired",
+        "n": 686
+      },
+      {
+        "status": "Active",
+        "n": 35
+      },
+      {
+        "status": "Cancelled",
+        "n": 1243
+      },
+      {
+        "status": "Closed",
+        "n": 1532
+      },
+      {
+        "status": "Pending",
+        "n": 3
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 1
+      },
+      {
+        "status": "Withdrawn",
+        "n": 9
+      },
+      {
+        "status": "Expired",
+        "n": 1068
+      },
+      {
+        "status": "Active",
+        "n": 164
+      },
+      {
+        "status": "Active With Contract",
+        "n": 1
+      },
+      {
+        "status": "Cancelled",
+        "n": 1371
+      },
+      {
+        "status": "Closed",
+        "n": 1297
+      },
+      {
+        "status": "Pending",
+        "n": 29
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 6
+      },
+      {
+        "status": "Withdrawn",
+        "n": 19
+      },
+      {
+        "status": "Expired",
+        "n": 1413
+      },
+      {
+        "status": "Active",
+        "n": 1438
+      },
+      {
+        "status": "Active With Contract",
+        "n": 53
+      },
+      {
+        "status": "Cancelled",
+        "n": 673
+      },
+      {
+        "status": "Closed",
+        "n": 869
+      },
+      {
+        "status": "Pending",
+        "n": 92
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 27
+      },
+      {
+        "status": "Withdrawn",
+        "n": 132
+      },
+      {
+        "status": "Expired",
+        "n": 352
+      },
+      {
+        "status": "Active",
+        "n": 8
+      },
+      {
+        "status": "Cancelled",
+        "n": 798
+      },
+      {
+        "status": "Closed",
+        "n": 1379
+      },
+      {
+        "status": "Pending",
+        "n": 1
+      },
+      {
+        "status": "Withdrawn",
+        "n": 4
+      },
+      {
+        "status": "Expired",
+        "n": 680
+      },
+      {
+        "status": "Active",
+        "n": 36
+      },
+      {
+        "status": "Cancelled",
+        "n": 1136
+      },
+      {
+        "status": "Closed",
+        "n": 1235
+      },
+      {
+        "status": "Pending",
+        "n": 2
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 2
+      },
+      {
+        "status": "Withdrawn",
+        "n": 2
+      },
+      {
+        "status": "Expired",
+        "n": 1042
+      },
+      {
+        "status": "Active",
+        "n": 192
+      },
+      {
+        "status": "Active With Contract",
+        "n": 5
+      },
+      {
+        "status": "Cancelled",
+        "n": 1145
+      },
+      {
+        "status": "Closed",
+        "n": 1078
+      },
+      {
+        "status": "Pending",
+        "n": 21
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 2
+      },
+      {
+        "status": "Withdrawn",
+        "n": 28
+      },
+      {
+        "status": "Expired",
+        "n": 1088
+      },
+      {
+        "status": "Active",
+        "n": 2282
+      },
+      {
+        "status": "Active With Contract",
+        "n": 99
+      },
+      {
+        "status": "Cancelled",
+        "n": 257
+      },
+      {
+        "status": "Closed",
+        "n": 308
+      },
+      {
+        "status": "Pending",
+        "n": 141
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 49
+      },
+      {
+        "status": "Withdrawn",
+        "n": 82
+      },
+      {
+        "status": "Expired",
+        "n": 33
+      },
+      {
+        "status": "Active",
+        "n": 10
+      },
+      {
+        "status": "Cancelled",
+        "n": 843
+      },
+      {
+        "status": "Closed",
+        "n": 1343
+      },
+      {
+        "status": "Withdrawn",
+        "n": 2
+      },
+      {
+        "status": "Expired",
+        "n": 737
+      },
+      {
+        "status": "Active",
+        "n": 60
+      },
+      {
+        "status": "Active With Contract",
+        "n": 1
+      },
+      {
+        "status": "Cancelled",
+        "n": 1095
+      },
+      {
+        "status": "Closed",
+        "n": 1094
+      },
+      {
+        "status": "Pending",
+        "n": 6
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 3
+      },
+      {
+        "status": "Withdrawn",
+        "n": 5
+      },
+      {
+        "status": "Expired",
+        "n": 1202
+      },
+      {
+        "status": "Active",
+        "n": 350
+      },
+      {
+        "status": "Active With Contract",
+        "n": 19
+      },
+      {
+        "status": "Cancelled",
+        "n": 890
+      },
+      {
+        "status": "Closed",
+        "n": 931
+      },
+      {
+        "status": "Pending",
+        "n": 19
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 6
+      },
+      {
+        "status": "Withdrawn",
+        "n": 63
+      },
+      {
+        "status": "Expired",
+        "n": 800
+      },
+      {
+        "status": "Active",
+        "n": 11
+      },
+      {
+        "status": "Cancelled",
+        "n": 952
+      },
+      {
+        "status": "Closed",
+        "n": 1313
+      },
+      {
+        "status": "Pending",
+        "n": 1
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 1
+      },
+      {
+        "status": "Withdrawn",
+        "n": 4
+      },
+      {
+        "status": "Expired",
+        "n": 811
+      },
+      {
+        "status": "Active",
+        "n": 77
+      },
+      {
+        "status": "Active With Contract",
+        "n": 2
+      },
+      {
+        "status": "Cancelled",
+        "n": 1094
+      },
+      {
+        "status": "Closed",
+        "n": 1139
+      },
+      {
+        "status": "Pending",
+        "n": 10
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 4
+      },
+      {
+        "status": "Withdrawn",
+        "n": 15
+      },
+      {
+        "status": "Expired",
+        "n": 1109
+      },
+      {
+        "status": "Active",
+        "n": 624
+      },
+      {
+        "status": "Active With Contract",
+        "n": 21
+      },
+      {
+        "status": "Cancelled",
+        "n": 782
+      },
+      {
+        "status": "Closed",
+        "n": 926
+      },
+      {
+        "status": "Pending",
+        "n": 55
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 21
+      },
+      {
+        "status": "Withdrawn",
+        "n": 94
+      },
+      {
+        "status": "Expired",
+        "n": 638
+      },
+      {
+        "status": "Active",
+        "n": 888
+      },
+      {
+        "status": "Coming Soon",
+        "n": 2
+      },
+      {
+        "status": "Active With Contract",
+        "n": 16
+      },
+      {
+        "status": "Cancelled",
+        "n": 17
+      },
+      {
+        "status": "Closed",
+        "n": 3
+      },
+      {
+        "status": "Pending",
+        "n": 19
+      },
+      {
+        "status": "Temp Off Market",
+        "n": 7
+      },
+      {
+        "status": "Withdrawn",
+        "n": 1
+      }
+    ],
+    "export_sorted_by_status": false
+  },
+  "warnings": [
+    "LIST DATE RECOVERED FOR 7181 ROWS \u2014 the export left `list_date` blank on these and it was derived as terminal date minus days_on_market, marked `list_date_source='derived_from_dom'`. Without the derivation these rows carry no list month, so no submarket-month median, so no rel_price_premium, and they leave identification entirely. Check the status breakdown of `list_date_source`: if the blanks fall on whole statuses, the panel would otherwise have been selected on the outcome.",
+    "IMPLAUSIBLE $/SQFT NULLED \u2014 13 listings had a derived list $/sqft outside the physical band and were marked `list_ppsf_source='implausible'`. These are almost always a wrong living_area_sqft against a correct price. Left in, one of them sets the upper end of the fitted rel_price_premium support and the extrapolation guard can then flag nothing."
+  ],
+  "outlier_flagged": 765,
+  "list_ppsf_implausible": 13,
+  "list_date_recovered": 7181
+}

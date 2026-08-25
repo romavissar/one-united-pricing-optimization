@@ -1,10 +1,8 @@
-# Secrets & local env.
-# `env` with no dot is listed deliberately: the live FRED / BLS / OpenRouter
-# keys sat in a file with exactly that name earlier in this project's history,
-# and `.env` alone does not cover it.
+# Secrets & local env — never commit these.
+# `env` with no dot is listed deliberately: live keys have sat in that filename.
 .env
 .env.*
-!.env.example
+.env.example
 env
 env.local
 *.env
@@ -26,23 +24,6 @@ htmlcov/
 node_modules/
 frontend/dist/
 frontend/.vite/
-
-# Data & DB (raw MLS and sqlite are local).
-# The repo-root `data/` holds the broker's quarterly exports — licensed MIAMI
-# Association of Realtors records with street addresses and transaction detail,
-# obtained under a member's credentials. `backend/data/raw/` alone did not
-# cover it, and a `git add -A` staged all 30 MB of it. Publishing this
-# repository for a write-up must not publish the MLS data with it.
-/data/
-backend/db/
-backend/data/raw/
-backend/data/raw/mls_old/
-# Regenerated on demand: python -m src.data.synth
-backend/data/synthetic/
-backend/data/processed/
-*.parquet
-*.sqlite
-*.sqlite3
 
 # OS / editor
 .DS_Store

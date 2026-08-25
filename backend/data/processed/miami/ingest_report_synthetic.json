@@ -1,0 +1,351 @@
+{
+  "files": [
+    {
+      "path": "data/synthetic/miami_synth.csv",
+      "rows": 6000
+    },
+    {
+      "path": "data/synthetic/miami_synth_like_export.csv",
+      "rows": 6000
+    },
+    {
+      "path": "data/synthetic/miami_synth_rich.csv",
+      "rows": 6000
+    }
+  ],
+  "rows_in": 18000,
+  "rows_out": 6000,
+  "mapping": {
+    "matched": [
+      "baths_full",
+      "baths_half",
+      "beds",
+      "building_name",
+      "city",
+      "close_date",
+      "close_price",
+      "cumulative_days_on_market",
+      "days_on_market",
+      "hoa_frequency",
+      "hoa_monthly",
+      "last_list_price",
+      "list_agent_name",
+      "list_date",
+      "list_office_name",
+      "living_area_sqft",
+      "mls_number",
+      "new_construction",
+      "off_market_date",
+      "original_list_price",
+      "pending_date",
+      "property_type",
+      "sale_type",
+      "status",
+      "street_address",
+      "subdivision",
+      "tax_annual",
+      "total_stories",
+      "unit_floor",
+      "unit_number",
+      "view_description",
+      "waterfront",
+      "year_built",
+      "zip_code"
+    ],
+    "matched_count": 34,
+    "required_missing": [],
+    "important_missing": [],
+    "unmapped_source_columns": {},
+    "source_to_canonical": {
+      "mls_number": "mls_number",
+      "status": "status",
+      "original_list_price": "original_list_price",
+      "list_date": "list_date",
+      "living_area_sqft": "living_area_sqft",
+      "zip_code": "zip_code",
+      "close_price": "close_price",
+      "close_date": "close_date",
+      "last_list_price": "last_list_price",
+      "days_on_market": "days_on_market",
+      "off_market_date": "off_market_date",
+      "beds": "beds",
+      "baths_full": "baths_full",
+      "street_address": "street_address",
+      "unit_number": "unit_number",
+      "building_name": "building_name",
+      "property_type": "property_type",
+      "sale_type": "sale_type",
+      "unit_floor": "unit_floor",
+      "cumulative_days_on_market": "cumulative_days_on_market",
+      "pending_date": "pending_date",
+      "baths_half": "baths_half",
+      "year_built": "year_built",
+      "new_construction": "new_construction",
+      "total_stories": "total_stories",
+      "hoa_monthly": "hoa_monthly",
+      "hoa_frequency": "hoa_frequency",
+      "tax_annual": "tax_annual",
+      "subdivision": "subdivision",
+      "city": "city",
+      "list_agent_name": "list_agent_name",
+      "list_office_name": "list_office_name",
+      "waterfront": "waterfront",
+      "view_description": "view_description"
+    }
+  },
+  "types": {
+    "mls_number": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "status": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "original_list_price": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "list_date": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "datetime64[ns]"
+    },
+    "living_area_sqft": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "zip_code": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "close_price": {
+      "null_count": 2406,
+      "null_rate": 0.401,
+      "dtype": "float64"
+    },
+    "close_date": {
+      "null_count": 2406,
+      "null_rate": 0.401,
+      "dtype": "datetime64[ns]"
+    },
+    "last_list_price": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "days_on_market": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "off_market_date": {
+      "null_count": 3594,
+      "null_rate": 0.599,
+      "dtype": "datetime64[ns]"
+    },
+    "beds": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "baths_full": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "street_address": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "unit_number": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "building_name": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "property_type": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "sale_type": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "unit_floor": {
+      "null_count": 193,
+      "null_rate": 0.0322,
+      "dtype": "float64"
+    },
+    "cumulative_days_on_market": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "pending_date": {
+      "null_count": 2406,
+      "null_rate": 0.401,
+      "dtype": "datetime64[ns]"
+    },
+    "baths_half": {
+      "null_count": 302,
+      "null_rate": 0.0503,
+      "dtype": "float64"
+    },
+    "year_built": {
+      "null_count": 56,
+      "null_rate": 0.0093,
+      "dtype": "float64"
+    },
+    "new_construction": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "total_stories": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    },
+    "hoa_monthly": {
+      "null_count": 132,
+      "null_rate": 0.022,
+      "dtype": "float64"
+    },
+    "hoa_frequency": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "tax_annual": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "subdivision": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "city": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "list_agent_name": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "list_office_name": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "waterfront": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "bool"
+    },
+    "view_description": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "floor": {
+      "null_count": 193,
+      "null_rate": 0.0322,
+      "dtype": "float64"
+    },
+    "floor_source": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "list_ppsf": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "duration_days": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "float64"
+    },
+    "submarket": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "object"
+    },
+    "event_sold": {
+      "null_count": 0,
+      "null_rate": 0.0,
+      "dtype": "int64"
+    }
+  },
+  "date_formats": {
+    "list_date": {
+      "%Y-%m-%d": 18000
+    },
+    "pending_date": {
+      "%Y-%m-%d": 9604
+    },
+    "close_date": {
+      "%Y-%m-%d": 9284
+    },
+    "off_market_date": {
+      "%Y-%m-%d": 8396
+    }
+  },
+  "filters": {
+    "distressed_sale_type": 105,
+    "rental_or_lease": 40,
+    "below_min_list_price": 504,
+    "duplicate_mls_number": 11351
+  },
+  "status_distribution": {
+    "SOLD": 3594,
+    "EXPIRED": 977,
+    "CANCELED": 813,
+    "WITHDRAWN": 616
+  },
+  "floor_source_distribution": {
+    "reported": 5807,
+    "missing": 193
+  },
+  "floor_rejected_by_stories": 0,
+  "submarket_coverage": {
+    "rows_with_submarket": 6000,
+    "rows_without_submarket": 0,
+    "unmapped_rate": 0.0,
+    "top_unmapped_zips": {}
+  },
+  "identification": {
+    "sold_count": 3594,
+    "non_sold_count": 2406,
+    "censored_expired_withdrawn_canceled": 2406,
+    "active_count": 0,
+    "pending_count": 0,
+    "pending_treated_as_sold": 0,
+    "event_sold_count": 3594,
+    "min_cell_listings": 8,
+    "rel_price_premium": null,
+    "note": "rel_price_premium is computed in Phase 2 (features). Identification IQR check runs after feature engineering.",
+    "submarket_month_cells_ge_min": 192,
+    "usable_rows_required_duration_submarket": 6000
+  },
+  "warnings": [],
+  "outlier_flagged": 31
+}

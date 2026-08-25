@@ -7,7 +7,7 @@ schedule that maximize discounted expected revenue, subject to real constraints.
 
 This system exists to estimate one number — **β_price**, own-price elasticity of
 demand. Read `PROJECT_BRIEF.md`, `AGENTS.md`, and `MLS_SCHEMA.md` before changing
-code.
+code. For a full deep-dive (architecture, models, bugs, flows), see `MASTER.md`.
 
 ## Quick start
 
