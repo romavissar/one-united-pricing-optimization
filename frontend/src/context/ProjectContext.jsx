@@ -10,13 +10,18 @@ import {
   fetchConfig,
   fetchCurrentDemand,
   fetchDemandCurve,
+  fetchMacro,
   fetchSensitivity,
   fitDemand,
   optimizePlan,
   simulatePlan,
   validateInventory,
 } from "../api/client.js";
-import { SENTIMENT_PRESETS, defaultPhases } from "../utils/format.js";
+import {
+  SENTIMENT_PRESETS,
+  defaultPhases,
+  resolveMacroDispersions,
+} from "../utils/format.js";
 
 const ProjectContext = createContext(null);
 
@@ -32,6 +37,15 @@ export function ProjectProvider({ children }) {
   const [projectStart, setProjectStart] = useState("2026-01-01");
   const [sentiment, setSentiment] = useState("base");
   const [nDraws, setNDraws] = useState(5000);
+
+  // Macro assumptions are data-driven by default. `macro` is the derived
+  // snapshot from GET /api/macro; `macroMode` is "data" (use the snapshot) or
+  // "custom" (the user clicked "input custom" and owns the σ). `customScenario`
+  // holds the user's overrides, seeded from the derived values so a custom edit
+  // starts from data rather than from nothing.
+  const [macro, setMacro] = useState(null);
+  const [macroMode, setMacroMode] = useState("data");
+  const [customScenario, setCustomScenario] = useState(null);
 
   const [planResult, setPlanResult] = useState(null);
   const [distribution, setDistribution] = useState(null);
@@ -82,6 +96,14 @@ export function ProjectProvider({ children }) {
           if (d.monte_carlo_draws != null) setNDraws(d.monte_carlo_draws);
         }
         await refreshDemand();
+        try {
+          const snap = await fetchMacro(market);
+          if (!cancelled) setMacro(snap);
+        } catch {
+          // Macro is a default, not a hard dependency: a fetch failure leaves
+          // macro null and the panel offers "input custom" instead.
+          if (!cancelled) setMacro(null);
+        }
       } catch (err) {
         if (!cancelled) setError(err.message);
       }
@@ -91,8 +113,69 @@ export function ProjectProvider({ children }) {
     };
   }, [market, refreshDemand]);
 
+  // The competing-listings baseline a relative macro swing is applied against:
+  // the median of the phases' assumed competing-listings counts (mirrors the
+  // backend). Used only to display and seed the resolved competing σ.
+  const competingBaseline = useMemo(() => {
+    const values = phases
+      .map((p) => Number(p.competing_listings))
+      .filter((v) => Number.isFinite(v));
+    if (!values.length) return 30;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }, [phases]);
+
+  // The derived σ resolved to spec units (competing_listings × baseline), for
+  // display and for seeding a custom edit.
+  const derivedDispersions = useMemo(
+    () => resolveMacroDispersions(macro, competingBaseline),
+    [macro, competingBaseline]
+  );
+
+  const enterCustomMacro = useCallback(() => {
+    setCustomScenario((prev) => prev || { ...derivedDispersions });
+    setMacroMode("custom");
+  }, [derivedDispersions]);
+
+  const useDataMacro = useCallback(() => setMacroMode("data"), []);
+
+  const setCustomField = useCallback((field, value) => {
+    setCustomScenario((prev) => ({
+      ...(prev || {}),
+      [field]: value,
+    }));
+  }, []);
+
+  const applySentimentPreset = useCallback((key) => {
+    const preset = SENTIMENT_PRESETS[key];
+    if (!preset) return;
+    setSentiment(key);
+    setCustomScenario({
+      absorption_log_hazard_sd: preset.absorption_log_hazard_sd,
+      comps_drift_sd: preset.comps_drift_sd,
+      completion_delay_months_sd: preset.completion_delay_months_sd,
+      competing_listings_sd: preset.competing_listings_sd,
+    });
+  }, []);
+
   const basePayload = useCallback(() => {
-    const preset = SENTIMENT_PRESETS[sentiment] || SENTIMENT_PRESETS.base;
+    // Data mode: send only the operational channel; leaving the three macro
+    // channels absent (null) tells the backend to derive them from FRED/BLS —
+    // the whole point of the inversion. Custom mode: send the user's explicit σ
+    // for every channel, and each supplied value wins server-side.
+    const scenario =
+      macroMode === "custom" && customScenario
+        ? {
+            absorption_log_hazard_sd: customScenario.absorption_log_hazard_sd,
+            comps_drift_sd: customScenario.comps_drift_sd,
+            competing_listings_sd: customScenario.competing_listings_sd,
+            completion_delay_months_sd: customScenario.completion_delay_months_sd,
+          }
+        : {
+            completion_delay_months_sd:
+              derivedDispersions.completion_delay_months_sd,
+          };
     return {
       market,
       project_start: projectStart,
@@ -100,12 +183,7 @@ export function ProjectProvider({ children }) {
       phases,
       discount_rate_annual: discountRate,
       presale_lead_months: presaleLeadMonths,
-      scenario: {
-        absorption_log_hazard_sd: preset.absorption_log_hazard_sd,
-        comps_drift_sd: preset.comps_drift_sd,
-        completion_delay_months_sd: preset.completion_delay_months_sd,
-        competing_listings_sd: preset.competing_listings_sd,
-      },
+      scenario,
     };
   }, [
     market,
@@ -114,7 +192,9 @@ export function ProjectProvider({ children }) {
     phases,
     discountRate,
     presaleLeadMonths,
-    sentiment,
+    macroMode,
+    customScenario,
+    derivedDispersions,
   ]);
 
   const runFit = useCallback(async () => {
@@ -296,6 +376,15 @@ export function ProjectProvider({ children }) {
       setSentiment,
       nDraws,
       setNDraws,
+      macro,
+      macroMode,
+      derivedDispersions,
+      competingBaseline,
+      customScenario,
+      enterCustomMacro,
+      useDataMacro,
+      setCustomField,
+      applySentimentPreset,
       planResult,
       distribution,
       sensitivity,
@@ -329,6 +418,15 @@ export function ProjectProvider({ children }) {
       projectStart,
       sentiment,
       nDraws,
+      macro,
+      macroMode,
+      derivedDispersions,
+      competingBaseline,
+      customScenario,
+      enterCustomMacro,
+      useDataMacro,
+      setCustomField,
+      applySentimentPreset,
       planResult,
       distribution,
       sensitivity,

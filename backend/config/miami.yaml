@@ -100,6 +100,26 @@ filters:
   exclude_sale_types: ["foreclosure", "short_sale", "auction", "reo"]
   property_types: ["condo", "co_op"]
 
+# Macro scenario assumptions are DERIVED FROM DATA (FRED + BLS), not typed by
+# the user. src/data/macro.py fetches these series and turns them into the
+# Monte-Carlo channel dispersions and correlations; the user only overrides a
+# channel via the "input custom" path. Series ids live here so the market seam
+# stays in config, not code — Bucharest would list its own (or omit the block
+# and take the documented fallback). These are reference codes, not estimates,
+# so they are not the "hardcoded estimated parameter" AGENTS.md §1 forbids.
+macro:
+  lookback_years: 12          # history window used to estimate volatility/correlation
+  cache_days: 7               # refetch cadence; BLS is 25 req/day keyless
+  fred_series:
+    home_price_index: MIXRSA                 # → comps_drift (nominal $/sqft move)
+    median_days_on_market: MEDDAYONMAR33100  # → absorption (−Δlog DOM, hazard identity)
+    active_listings: ACTLISCOU33100          # → competing_listings (relative swing)
+    mortgage_rate: MORTGAGE30US              # context: rate level + 1y change
+  bls_series:
+    area_cpi: CUURS35CSA0                     # context: nominal→real appreciation
+    unemployment_rate: LAUMT123310000000003  # context: labour-market demand signal
+
 notes:
   floor_premium: "alpha and gamma are ESTIMATED per project from hedonic fit; no defaults"
   hoa_effect: "model via hoa_per_sqft covariate; FL insurance costs make this material"
+  macro_assumptions: "scenario sigmas are DATA-DERIVED via FRED+BLS (src/data/macro.py); user override is per-channel, not the default"

@@ -60,6 +60,37 @@ export function defaultPhases() {
   ];
 }
 
+// Operational default for construction-slippage σ (months). Not a macro series
+// — no public data measures it — so it stays user-owned even in data mode.
+const DEFAULT_COMPLETION_DELAY_MONTHS_SD = 1.0;
+
+/**
+ * Resolve a macro snapshot's channel σ to scenario-spec units.
+ *
+ * The absolute channels (comps_drift, absorption) come straight off the
+ * snapshot; competing_listings is stored as a relative swing and multiplied by
+ * the plan's competing-listings baseline to become a count σ (mirrors the
+ * backend). Falls back to the "base" preset numbers when no snapshot is present.
+ */
+export function resolveMacroDispersions(macro, competingBaseline = 30) {
+  const base = SENTIMENT_PRESETS.base;
+  if (!macro || !macro.dispersions) {
+    return {
+      absorption_log_hazard_sd: base.absorption_log_hazard_sd,
+      comps_drift_sd: base.comps_drift_sd,
+      competing_listings_sd: base.competing_listings_sd,
+      completion_delay_months_sd: DEFAULT_COMPLETION_DELAY_MONTHS_SD,
+    };
+  }
+  const rel = macro.relative_dispersions || {};
+  return {
+    absorption_log_hazard_sd: macro.dispersions.absorption_log_hazard_sd ?? 0,
+    comps_drift_sd: macro.dispersions.comps_drift_sd ?? 0,
+    competing_listings_sd: (rel.competing_listings_sd ?? 0) * competingBaseline,
+    completion_delay_months_sd: DEFAULT_COMPLETION_DELAY_MONTHS_SD,
+  };
+}
+
 /** Macro sentiment → scenario standard deviations (assumptions, not estimates). */
 export const SENTIMENT_PRESETS = {
   pessimistic: {

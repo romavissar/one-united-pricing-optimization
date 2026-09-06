@@ -25,6 +25,7 @@ from src.api.services import (
     current_demand_metadata,
     inventory_frame_from_csv_bytes,
     inventory_frame_from_xlsx_bytes,
+    macro_payload,
     market_config_payload,
     run_demand_curve,
     run_fit,
@@ -51,6 +52,18 @@ _MAX_INVENTORY_ROWS = 20_000
 def get_config(market: str) -> dict[str, Any]:
     """Submarkets, view categories, bounds, defaults."""
     return market_config_payload(market)
+
+
+@router.get("/api/macro/{market}")
+def get_macro(
+    market: str, horizon_days: int | None = Query(default=None, ge=1, le=3650)
+) -> dict[str, Any]:
+    """Data-derived macro scenario assumptions (FRED + BLS).
+
+    The frontend shows this by default; a caller only sends custom σ on
+    /api/simulate when the user clicks "input custom".
+    """
+    return macro_payload(market, horizon_days)
 
 
 @router.post("/api/inventory/validate")

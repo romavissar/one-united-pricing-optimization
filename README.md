@@ -326,10 +326,25 @@ and are labelled as such in every response, alongside `provenance` including
   the discounted `R` of `PROJECT_BRIEF.md` §4.3 — a covenant is measured in the
   cash that arrives. Set `ConstraintSet(cash_flow_basis="discounted")` to match
   the brief exactly, and read `CF_min` as present-value dollars if you do.
-- **Mortgage rates enter as an absorption (log-hazard) shift, not a fitted
-  rate→hazard path.** There is no macro series joined to listings, so inventing
-  a sensitivity would hardcode an estimated parameter. Config holds bounds;
-  the user owns the shock size.
+- **Macro scenario dispersions are derived from data, not typed by the user.**
+  `src/data/macro.py` pulls Miami series from FRED and BLS and turns each into a
+  Monte-Carlo channel σ through a transparent, coefficient-free mapping:
+  `comps_drift` from Case-Shiller Miami log-return volatility (the channel *is* a
+  price move); `absorption` from the volatility of `−Δlog(median days-on-market)`,
+  which is the accounting identity `hazard ≈ 1/time-to-sale`, not an estimated
+  rate→hazard sensitivity; `competing_listings` from the active-listing count's
+  relative swing, scaled to the plan's assumed level. Cross-channel correlations
+  are estimated from the aligned history; `beta_price`'s correlations to them stay
+  documented priors because `beta_price` is not a macro observable. `GET
+  /api/macro/{market}` returns the derived assumptions with full provenance
+  (`fred_bls` / `cache` / `static_fallback`); `simulate`/`sensitivity` carry the
+  same block. A user overrides one channel via "input custom"; that value wins
+  for that channel only. When the APIs are unreachable and no cache exists, the
+  documented fallback assumptions are used and labelled as such. Mortgage rate,
+  CPI, and unemployment enter as reported context (nominal vs real appreciation,
+  the rate outlook, the labour-market signal). `completion_delay_months` is left
+  user-owned: it is operational, not macro, and no public series measures
+  construction slippage in months.
 - **A unit the demand model cannot score gets no price at all.** Missing a
   covariate the model was fitted on means a NaN probability, which becomes an
   excluded unit with a stated reason rather than an imputed average. Same for a

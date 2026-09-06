@@ -574,8 +574,14 @@ Channels:
 Correlated via correlation matrix + Cholesky. Non-PSD matrix → hard error.
 Rejects `beta_price_mean ≥ 0` (don’t simulate broken identification).
 
-Mortgage rates enter only as absorption assumptions — no fitted rate→hazard
-path (would hardcode an estimate).
+Macro channel dispersions are DERIVED FROM DATA (`src/data/macro.py`, FRED+BLS),
+not typed by the user: `comps_drift` from Case-Shiller Miami return volatility,
+`absorption` from `−Δlog(median DOM)` volatility (hazard≈1/time-to-sale identity,
+not a fitted rate→hazard coefficient), `competing_listings` from the active-
+listing relative swing × the plan's assumed level. Correlations among these three
+are estimated from history; `beta_price`'s stay documented priors. User override
+is per-channel ("input custom"); offline → documented fallback, labelled in
+provenance. Mortgage rate / CPI / unemployment are reported context.
 
 ### Monte Carlo (`monte_carlo.py`)
 
@@ -806,7 +812,9 @@ Documented in `AGENTS.md` / `README.md` — **do not silently remove**:
 4. **Static demand** over the sales horizon (no between-phase refit).
 5. **Real export sampling** (off-market window, 5k cap) attenuates β in ways
    the sample cannot measure.
-6. Mortgage rates as **assumed** absorption shocks, not fitted macro elasticities.
+6. Macro channel dispersions are **derived from FRED+BLS volatility** via
+   coefficient-free mappings (no fitted rate→hazard elasticity); the absorption
+   channel uses the `hazard≈1/DOM` identity, not an estimated sensitivity.
 
 ---
 

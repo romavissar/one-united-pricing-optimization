@@ -31,3 +31,6 @@ frontend/.vite/
 .vscode/
 *.swp
 *~
+
+# Volatile macro snapshot cache (timestamped fetch of FRED/BLS)
+backend/data/processed/*/macro_cache.json

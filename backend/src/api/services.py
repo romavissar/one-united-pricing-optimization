@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import io
 import logging
+from dataclasses import replace
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from src.api.schemas import (
@@ -24,6 +26,7 @@ from src.api.schemas import (
     SimulateRequest,
 )
 from src.config import MarketConfig, load_market_config
+from src.data.macro import MacroSnapshot, build_macro_snapshot, fallback_correlation_pairs
 from src.demand.fit import FitRequest, fit_demand
 from src.demand.registry import ModelBundle, load_bundle, load_metadata
 from src.exceptions import InfeasibleModelError, SchemaError
@@ -333,21 +336,136 @@ def _synthetic_result(
     )
 
 
-def _scenario_spec(bundle: ModelBundle, scenario: ScenarioInput) -> ScenarioSpec:
+_MACRO_CHANNEL_FIELDS = (
+    "absorption_log_hazard_sd",
+    "comps_drift_sd",
+    "competing_listings_sd",
+)
+_INVENTORY_TERM = "inventory_competition"
+
+
+def _competing_listings_baseline(phases: list[PhaseInput]) -> float:
+    """Representative competing-listings level the relative macro swing scales.
+
+    The median of the phases' assumed competing-listings counts. A relative
+    listing-count swing measured from the metro series is meaningless as an
+    absolute count until it is applied to the level the plan assumes.
+    """
+    values = [float(p.competing_listings) for p in phases if p.competing_listings is not None]
+    if not values:
+        return 30.0
+    return float(np.median(values))
+
+
+def _scenario_spec(
+    bundle: ModelBundle,
+    scenario: ScenarioInput,
+    macro: MacroSnapshot,
+    *,
+    competing_baseline: float,
+) -> tuple[ScenarioSpec, dict[str, Any]]:
+    """Build the scenario spec, data-driven by default with per-channel override.
+
+    Each macro channel takes its σ from `macro` unless the request supplied an
+    explicit number ("input custom"), which wins for that channel only. The
+    cross-channel correlations come from `macro` too — estimated among the
+    observable channels, documented priors for `beta_price`'s pairs.
+
+    Returns the spec and a resolution block naming, per channel, whether the σ
+    was `data` or `custom` — surfaced in provenance so a reader always knows
+    which numbers were measured.
+    """
     beta = bundle.cox_result.beta_price
     se = (
         float(scenario.beta_price_se)
         if scenario.beta_price_se is not None
         else float(beta.std_error)
     )
-    return ScenarioSpec(
+
+    derived = macro.scenario_dispersions(competing_baseline)
+    has_inventory_coef = _INVENTORY_TERM in bundle.cox_result.coefficients
+
+    resolution: dict[str, Any] = {}
+    values: dict[str, float] = {}
+    for field_name in _MACRO_CHANNEL_FIELDS:
+        override = getattr(scenario, field_name)
+        if override is not None:
+            values[field_name] = float(override)
+            resolution[field_name] = {"source": "custom", "value": float(override)}
+        else:
+            values[field_name] = float(derived.get(field_name, 0.0))
+            resolution[field_name] = {
+                "source": macro.source,
+                "value": values[field_name],
+            }
+
+    # competing_listings needs a fitted inventory coefficient to reach the
+    # hazard. If the model was not fit with it, a data-driven activation would
+    # trip the monte_carlo guard; hold the channel at zero and say so rather
+    # than derive a σ the simulator cannot use. An explicit user override is
+    # left to trip the guard with its own clear message.
+    if (
+        values["competing_listings_sd"] > 0
+        and not has_inventory_coef
+        and scenario.competing_listings_sd is None
+    ):
+        values["competing_listings_sd"] = 0.0
+        resolution["competing_listings_sd"] = {
+            "source": "disabled",
+            "value": 0.0,
+            "note": (
+                "competing_listings held at zero: the fitted demand model has no "
+                f"{_INVENTORY_TERM} coefficient for the shift to act through."
+            ),
+        }
+
+    spec = ScenarioSpec(
         beta_price_mean=float(beta.value),
         beta_price_se=se,
-        absorption_log_hazard_sd=scenario.absorption_log_hazard_sd,
-        competing_listings_sd=scenario.competing_listings_sd,
-        comps_drift_sd=scenario.comps_drift_sd,
+        absorption_log_hazard_sd=values["absorption_log_hazard_sd"],
+        competing_listings_sd=values["competing_listings_sd"],
+        comps_drift_sd=values["comps_drift_sd"],
         completion_delay_months_sd=scenario.completion_delay_months_sd,
+        correlation=macro.correlation_pairs(),
     )
+    # A sample correlation among the macro channels is PSD, but adding
+    # beta_price's fixed priors can, for some active-channel sets, tip the joint
+    # matrix out of PSD — a world with no joint distribution. Probe it over the
+    # channels that are actually active; on failure fall back to the documented
+    # PSD priors rather than let the draw raise at simulate time.
+    try:
+        spec.correlation_matrix()
+    except SchemaError:
+        logger.warning(
+            "estimated macro correlations are not PSD over the active channels; "
+            "falling back to documented sign priors."
+        )
+        spec = replace(spec, correlation=fallback_correlation_pairs())
+        resolution["correlation"] = {"source": "fallback_priors_non_psd"}
+    else:
+        resolution["correlation"] = {"source": macro.source}
+    resolution["completion_delay_months_sd"] = {
+        "source": "user",
+        "value": float(scenario.completion_delay_months_sd),
+    }
+    resolution["beta_price_se"] = {
+        "source": "custom" if scenario.beta_price_se is not None else "fitted",
+        "value": se,
+    }
+    return spec, resolution
+
+
+def _macro_snapshot_for(market: str, horizon_days: int) -> MacroSnapshot:
+    """Build the market's macro snapshot, scaled to the sale horizon.
+
+    Never raises for a network/key problem — `build_macro_snapshot` degrades to
+    cache then documented fallback, both labelled in `source`.
+    """
+    try:
+        config = load_market_config(market)
+    except SchemaError:
+        config = None
+    return build_macro_snapshot(market, horizon_days, config=config)
 
 
 def run_simulate(body: SimulateRequest) -> RevenueDistribution:
@@ -363,7 +481,16 @@ def run_simulate(body: SimulateRequest) -> RevenueDistribution:
     )
     if not body.plan:
         raise SchemaError("simulate requires a non-empty plan from /api/optimize")
+    macro = _macro_snapshot_for(body.market, spec.horizon_days)
+    scenario_spec, resolution = _scenario_spec(
+        bundle,
+        body.scenario,
+        macro,
+        competing_baseline=_competing_listings_baseline(body.phases),
+    )
     provenance = _provenance_from_bundle(bundle).as_response_block()
+    provenance["macro"] = macro.as_dict()
+    provenance["scenario_resolution"] = resolution
     result = _synthetic_result(
         body.plan, spec.phases, provenance, cash_flow_basis=body.cash_flow_basis
     )
@@ -374,7 +501,7 @@ def run_simulate(body: SimulateRequest) -> RevenueDistribution:
         result,
         tensor,
         units,
-        _scenario_spec(bundle, body.scenario),
+        scenario_spec,
         n_draws=n_draws,
         seed=body.seed,
         presale_lead_months=spec.presale_lead_months,
@@ -400,7 +527,16 @@ def run_sensitivity(
     del ladder
     if not body.plan:
         raise SchemaError("sensitivity requires a non-empty plan from /api/optimize")
+    macro = _macro_snapshot_for(body.market, spec.horizon_days)
+    scenario_spec, resolution = _scenario_spec(
+        bundle,
+        body.scenario,
+        macro,
+        competing_baseline=_competing_listings_baseline(body.phases),
+    )
     provenance = _provenance_from_bundle(bundle).as_response_block()
+    provenance["macro"] = macro.as_dict()
+    provenance["scenario_resolution"] = resolution
     result = _synthetic_result(
         body.plan, spec.phases, provenance, cash_flow_basis=body.cash_flow_basis
     )
@@ -409,7 +545,7 @@ def run_sensitivity(
         result,
         tensor,
         units,
-        _scenario_spec(bundle, body.scenario),
+        scenario_spec,
         presale_lead_months=spec.presale_lead_months,
         phase_dates=spec.phase_dates(),
         hazard_coefficients=hazard,
@@ -467,6 +603,21 @@ def run_demand_curve(body: DemandCurveRequest) -> dict[str, Any]:
         "p_ceiling_ppsf": float(ladder.p_ceiling_ppsf[ladder.index_of(body.unit_id)]),
         "horizon_days": spec.horizon_days,
     }
+
+
+def macro_payload(market: str, horizon_days: int | None = None) -> dict[str, Any]:
+    """Data-derived macro assumptions for a market — the frontend's default view.
+
+    This is what the "Macro assumptions" panel shows before any user override:
+    the σ each channel gets from FRED/BLS, the estimated correlations, the
+    context figures, and where they came from. `horizon_days` defaults to the
+    market's configured sale horizon so the σ match what optimize/simulate use.
+    """
+    config = load_market_config(market)
+    defaults = config.get("defaults") or {}
+    horizon = int(horizon_days or defaults.get("horizon_days") or 180)
+    snapshot = build_macro_snapshot(market, horizon, config=config)
+    return snapshot.as_dict()
 
 
 def market_config_payload(market: str) -> dict[str, Any]:

@@ -77,12 +77,25 @@ class PlanRowInput(BaseModel):
 
 
 class ScenarioInput(BaseModel):
-    """Uncertainty around a plan. Only beta_price's SE is fitted evidence."""
+    """Uncertainty around a plan.
+
+    The three macro channels default to `None`, which means "derive from data"
+    — the backend fills them from a `MacroSnapshot` built off FRED and BLS (see
+    `src/data/macro.py`). A caller who wants a what-if instead ("input custom")
+    supplies an explicit number and it wins for that channel only. This is the
+    inversion the product asked for: data-driven by default, user override by
+    exception, rather than the user typing every σ.
+
+    `beta_price_se` is fitted evidence (the Cox standard error); `None` uses the
+    fit. `completion_delay_months_sd` is operational, not macro — no public
+    series measures construction slippage in months — so it stays user-owned
+    with a plain default.
+    """
 
     beta_price_se: float | None = None
-    absorption_log_hazard_sd: float = 0.15
-    competing_listings_sd: float = 0.0
-    comps_drift_sd: float = 0.03
+    absorption_log_hazard_sd: float | None = None
+    competing_listings_sd: float | None = None
+    comps_drift_sd: float | None = None
     completion_delay_months_sd: float = 1.0
 
 

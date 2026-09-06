@@ -38,6 +38,12 @@ export async function fetchConfig(market = "miami") {
   return jsonFetch(`/api/config/${market}`);
 }
 
+export async function fetchMacro(market = "miami", horizonDays) {
+  const query =
+    horizonDays != null ? `?horizon_days=${encodeURIComponent(horizonDays)}` : "";
+  return jsonFetch(`/api/macro/${market}${query}`);
+}
+
 export async function validateInventory(market, rows) {
   return jsonFetch("/api/inventory/validate", {
     method: "POST",

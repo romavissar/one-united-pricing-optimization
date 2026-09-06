@@ -23,6 +23,17 @@ INVENTORY_CSV = (
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _macro_offline(monkeypatch):
+    """Keep route tests hermetic: derive macro from fallback, never the network.
+
+    The data-driven macro path (FRED/BLS) is covered directly in test_macro.py
+    with mocked clients; here we only need optimize/simulate/sensitivity to build
+    a deterministic scenario spec without an outbound call.
+    """
+    monkeypatch.setenv("MACRO_DISABLE_NETWORK", "1")
+
+
 def _phases() -> list[dict]:
     return [
         {"name": "launch", "start_month": 0.0, "max_units": 20, "competing_listings": 30.0},
