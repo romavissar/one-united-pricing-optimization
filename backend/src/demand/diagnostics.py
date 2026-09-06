@@ -33,7 +33,7 @@ import statsmodels.api as sm
 from src.data.features import DEMAND_COVARIATES
 from src.demand.base import Coefficient, FitResult
 from src.demand.logistic import LogisticDemandModel
-from src.exceptions import IdentificationError
+from src.exceptions import IdentificationError, SchemaError
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,22 @@ _OPTIONAL_HEDONIC_CONTROLS: tuple[str, ...] = (
     "log_living_area",
     "building_name",
 )
+
+# A multi-valued column does not enter the design under its own name: it is
+# tokenized into indicators (`view_description` -> `view_bay`, `view_canal`, ...)
+# and it is those the fit controls for. Matching on the raw name alone made the
+# report claim view was uncontrolled while fifteen view indicators were in the
+# design, which inverts the note's meaning — it exists to say the coefficient is
+# attenuated, and it was saying so about a control that is present.
+_CONTROL_PROXY_PREFIXES: dict[str, str] = {"view_description": "view_"}
+
+
+def _is_controlled(column: str, controlled_for: set[str]) -> bool:
+    """Whether `column`'s information is in the design, directly or as tokens."""
+    if column in controlled_for:
+        return True
+    prefix = _CONTROL_PROXY_PREFIXES.get(column)
+    return bool(prefix) and any(c.startswith(prefix) for c in controlled_for)
 
 
 @dataclass
@@ -449,7 +465,9 @@ def run_diagnostics(
     unused = [
         c
         for c in _OPTIONAL_HEDONIC_CONTROLS
-        if c in frame.columns and c not in controlled_for and frame[c].notna().any()
+        if c in frame.columns
+        and not _is_controlled(c, controlled_for)
+        and frame[c].notna().any()
     ]
     if unused:
         notes.append(
@@ -595,6 +613,102 @@ def _targets_real_data(directory: object, files: object) -> bool:
     return any("raw" in Path(str(c)).resolve().parts for c in candidates)
 
 
+def cancelled_sweep(
+    *,
+    market: str,
+    paths: list[object] | None,
+    raw_dir: object,
+    controls: bool,
+    building_fe: bool,
+) -> list[dict[str, Any]]:
+    """Refit beta_price under each treatment of CANCELED and return all three.
+
+    27% of the quarterly export is Cancelled, and the three readings of that
+    status are not nested — one censors, one drops the rows, one calls them
+    sales. The historical choice (`censored`) is defensible but it is a choice,
+    and until the three numbers sit side by side nobody can see how much of
+    `beta_price` rests on it. This runs the comparison rather than arguing it.
+
+    Nothing here selects a treatment. The configured value stays in force; this
+    reports what the alternatives would have produced.
+    """
+    from src.config import CANCELLED_TREATMENTS, load_market_config
+    from src.data.features import build_features
+    from src.data.ingest_mls import ingest_mls
+    from src.demand.survival import (
+        CONTROLLED_CATEGORICALS,
+        CoxDemandModel,
+        available_covariates,
+    )
+
+    rows: list[dict[str, Any]] = []
+    for rule in CANCELLED_TREATMENTS:
+        config = load_market_config(market)
+        config.setdefault("defaults", {})["cancelled_treatment"] = rule
+        try:
+            ingested = ingest_mls(
+                paths=paths, market=market, raw_dir=raw_dir, config=config
+            )
+            frame = build_features(ingested.frame, config).frame
+            covariates = (
+                available_covariates(frame) if controls else tuple(DEMAND_COVARIATES)
+            )
+            categoricals = (
+                CONTROLLED_CATEGORICALS if controls else ("submarket", "season")
+            )
+            result = CoxDemandModel(
+                covariates=covariates,
+                categoricals=categoricals,
+                building_fixed_effects=building_fe,
+            ).fit(frame)
+        except (SchemaError, IdentificationError) as exc:
+            rows.append({"treatment": rule, "error": str(exc)})
+            continue
+        beta = _get(result, "rel_price_premium")
+        rows.append(
+            {
+                "treatment": rule,
+                "rows_fitted": int(result.n_observations),
+                "events": int(pd.to_numeric(frame["event_sold"], errors="coerce").fillna(0).sum()),
+                "beta_price": None if beta is None else float(beta.value),
+                "ci_low": None if beta is None else float(beta.ci_low),
+                "ci_high": None if beta is None else float(beta.ci_high),
+                "excludes_zero": None if beta is None else bool(beta.excludes_zero),
+            }
+        )
+    return rows
+
+
+def format_cancelled_sweep(rows: list[dict[str, Any]], configured: str) -> str:
+    """Render `cancelled_sweep` as a table, marking the treatment in force."""
+    lines = [
+        "CANCELED TREATMENT SWEEP",
+        "  How beta_price moves with the coding of Cancelled listings. The "
+        "configured",
+        f"  treatment is {configured!r}; the others are shown for comparison "
+        "only.",
+        "",
+        f"  {'treatment':<12} {'rows':>7} {'events':>7} {'beta_price':>11}  95% CI",
+    ]
+    for row in rows:
+        mark = "*" if row["treatment"] == configured else " "
+        if "error" in row:
+            lines.append(f" {mark}{row['treatment']:<12} FAILED: {row['error']}")
+            continue
+        beta = row["beta_price"]
+        if beta is None:
+            lines.append(f" {mark}{row['treatment']:<12} no rel_price_premium coefficient")
+            continue
+        lines.append(
+            f" {mark}{row['treatment']:<12} {row['rows_fitted']:>7} "
+            f"{row['events']:>7} {beta:>11.4f}  "
+            f"[{row['ci_low']:.4f}, {row['ci_high']:.4f}]"
+        )
+    lines.append("")
+    lines.append("  * = treatment in force (defaults.cancelled_treatment)")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Fit the demand system on an export and print its diagnostics.
 
@@ -604,7 +718,7 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
     from pathlib import Path
 
-    from src.config import load_market_config
+    from src.config import cancelled_treatment, load_market_config
     from src.data.features import build_features
     from src.data.ingest_mls import ingest_mls
     from src.demand.logistic import LogisticDemandModel
@@ -613,7 +727,6 @@ def main(argv: list[str] | None = None) -> int:
         CoxDemandModel,
         available_covariates,
     )
-    from src.exceptions import SchemaError
 
     parser = argparse.ArgumentParser(description="Fit the demand model and report")
     parser.add_argument("--inspect", action="store_true", help="print the report")
@@ -629,6 +742,14 @@ def main(argv: list[str] | None = None) -> int:
         "--building-fe",
         action="store_true",
         help="absorb building fixed effects; drops submarket, which they nest",
+    )
+    parser.add_argument(
+        "--cancelled-sweep",
+        action="store_true",
+        help=(
+            "also refit under each of censored/excluded/event for CANCELED and "
+            "print the three beta_price values side by side"
+        ),
     )
     parser.add_argument("--horizon-days", type=int, default=None)
     parser.add_argument(
@@ -686,6 +807,22 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(format_diagnostics_report(report))
+
+    if args.cancelled_sweep:
+        print()
+        print(
+            format_cancelled_sweep(
+                cancelled_sweep(
+                    market=args.market,
+                    paths=args.file,
+                    raw_dir=args.dir,
+                    controls=args.controls,
+                    building_fe=args.building_fe,
+                ),
+                cancelled_treatment(config),
+            )
+        )
+
     if report.status == "FAILED":
         return 1
     return 2 if report.status == "WARN" else 0

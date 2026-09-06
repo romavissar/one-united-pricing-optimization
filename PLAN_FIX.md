@@ -11,12 +11,12 @@ carried over from a doc. Ordered by what I'd do first, not by severity.
 | 1 | ~~`view_description` as a 1,139-level categorical in the Cox~~ **DONE** | HIGH | 45 min |
 | 2 | ~~`premium_model` lost silently via `frame.attrs`~~ **DONE** | HIGH | 45 min |
 | 3 | ~~Premium reference vs comps band incomparable (R2)~~ **DONE — resolved by items 1+2** | HIGH | — |
-| 4 | CANCELED treatment hardcoded, never swept | MEDIUM | 1 h |
+| 4 | ~~CANCELED treatment hardcoded, never swept~~ **DONE** | MEDIUM | 1 h |
 | 5 | ~~Stale `PRICING VARIATION TOO WIDE` explanation~~ **DONE** | MEDIUM | 15 min |
-| 6 | `Last Status` unmapped, semantics undocumented | MEDIUM | 30 min |
+| 6 | ~~`Last Status` unmapped, semantics undocumented~~ **DONE** | MEDIUM | 30 min |
 | 7 | ~~Dead HOA code + misleading report line~~ **DONE** | LOW | 15 min |
 | 8 | ~~First-stage hedonic absent from bundle metadata~~ **DONE** | LOW | 20 min |
-| 9 | Building-count reporting in ingest | LOW | 20 min |
+| 9 | ~~Building-count reporting in ingest~~ **DONE** | LOW | 20 min |
 | 10 | ~~pandas `FutureWarning` at `clean.py:162`~~ **DONE** | LOW | 2 min |
 | 11 | ~~`REMEDIATION_REPORT.md` §4 paragraph now false~~ **DONE** | LOW | 5 min |
 
@@ -121,7 +121,23 @@ price floor.
 - Test: assert reference and ladder bands overlap for ≥90% of a standard
   inventory, and that the clamp actually engages.
 
-## 4. CANCELED is hardcoded as censored and never swept
+## 4. CANCELED is hardcoded as censored and never swept — **DONE**
+
+`defaults.cancelled_treatment` (`censored` | `excluded` | `event`), validated by
+`config.cancelled_treatment` (raises on an unknown value). `excluded` marks rows
+in `normalize` and drops them in `clean_mls`, so the count lands in the filters
+waterfall. `--cancelled-sweep` on `src.demand.diagnostics` refits all three:
+
+| Treatment | Rows | Events | `beta_price` | 95% CI |
+|---|---|---|---|---|
+| `censored` (in force) | 44,591 | 16,176 | −0.4310 | [−0.4795, −0.3824] |
+| `excluded` | 32,562 | 16,176 | −0.3994 | [−0.4474, −0.3513] |
+| `event` | 44,591 | 29,070 | −0.2336 | [−0.2659, −0.2012] |
+
+Sign and exclusion of zero survive all three; the magnitude moves 1.8×. Written
+up in `MLS_SCHEMA.md` §3. Original notes below.
+
+### Original notes
 
 12,894 rows — 27% of the sample — bucketed as censored at `ingest_mls.py:232-237`
 with no config knob anywhere. Unlike EXPIRED, a cancellation is ambiguous: many
@@ -147,7 +163,16 @@ There is no cell. Correct number, wrong reason.
   computed and already reported.
 - Keep the warning intact for the cell-median spec.
 
-## 6. `Last Status` unmapped
+## 6. `Last Status` unmapped — **DONE**
+
+`audit/r04_last_status.py` settled it: `Status` matches a `Closing Date` on
+16,014/16,014 sales, `Last Status` on 1 — it is the *previous* status (every
+Closed row's is `Pending` 10,744 or `Active With Contract` 4,419). Mapped to
+canonical `last_status` so it is no longer an undocumented `_unmapped` column,
+and `MLS_SCHEMA.md` §3 records that it deliberately never codes an outcome.
+Original notes below.
+
+### Original notes
 
 Confirmed absent from `src/` entirely; falls into `_unmapped` with no semantics.
 - Cross-tab against `Closing Date` / `Expiration Date` presence to establish
@@ -170,7 +195,15 @@ not, so a saved bundle cannot say what the identifying variable's first stage
 looked like. Add a `premium_hedonic` block to `build_metadata` from the
 `FeatureReport.hedonic_premium` dict that already exists.
 
-## 9. Building-count reporting
+## 9. Building-count reporting — **DONE**
+
+`IDENTIFICATION READINESS` now prints building cardinality: 9,360 named
+buildings, median 2 listings each, **2,204 with ≥5 listings covering 35,074
+rows**. On the old single-quarter export the median was 1 and `--building-fe`
+absorbed nothing; on the quarterly pull it has real within-building support.
+Original notes below.
+
+### Original notes
 
 Given D7 (median 1 listing/building on the old export, 94% of towers pooled),
 report `unit_key`/`building_name` cardinality and the count of buildings with

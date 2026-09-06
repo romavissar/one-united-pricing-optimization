@@ -80,6 +80,7 @@
       "is_reo",
       "is_short_sale",
       "last_list_price",
+      "last_status",
       "list_date",
       "living_area_sqft",
       "min_lease_days",
@@ -108,7 +109,7 @@
       "year_built",
       "zip_code"
     ],
-    "matched_count": 42,
+    "matched_count": 43,
     "required_missing": [],
     "important_missing": [
       "sale_type"
@@ -116,7 +117,6 @@
     "unmapped_source_columns": {
       "List Price": 48206,
       "MLS": 48206,
-      "Last Status": 42296,
       "Expiration Date": 40815,
       "Maintenance Charge/Month": 7565,
       "Main Living Area": 5243
@@ -153,6 +153,7 @@
       "Waterfront Property (Y/N)": "waterfront",
       "Total Floors In Building": "total_stories",
       "Unit Floor Location": "unit_floor",
+      "Last Status": "last_status",
       "Unit Number": "unit_number",
       "Waterfront Description": "waterfront_description",
       "Amenities": "amenities",
@@ -276,6 +277,11 @@
       "null_count": 0,
       "null_rate": 0.0,
       "dtype": "datetime64[ns]"
+    },
+    "last_status": {
+      "null_count": 5744,
+      "null_rate": 0.1214,
+      "dtype": "object"
     },
     "baths_half": {
       "null_count": 2577,
@@ -504,7 +510,13 @@
     "rel_price_premium": null,
     "note": "rel_price_premium is computed in Phase 2 (features). Identification IQR check runs after feature engineering.",
     "submarket_month_cells_ge_min": 534,
-    "usable_rows_required_duration_submarket": 44745
+    "usable_rows_required_duration_submarket": 44745,
+    "buildings_named": 9360,
+    "buildings_ge_min_listings": 2204,
+    "building_fe_min_listings": 5,
+    "rows_in_buildings_ge_min": 35074,
+    "median_listings_per_building": 2.0,
+    "rows_missing_building_name": 773
   },
   "sampling": {
     "list_date_min": "2023-01-01",

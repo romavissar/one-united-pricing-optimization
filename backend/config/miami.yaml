@@ -67,6 +67,12 @@ defaults:
   horizon_days: 180
   price_ladder_levels: 15
   min_cell_listings: 8  # (submarket, month) cell threshold
+  # How a CANCELED listing enters the survival panel: censored | excluded |
+  # event. 27% of the quarterly export is Cancelled and what it means is
+  # ambiguous — many are relists or brokerage changes rather than a unit the
+  # market refused. `censored` is the historical treatment; sweep the three and
+  # read the beta_price each produces before trusting any of them.
+  cancelled_treatment: censored
   crowding_lambda: 0.30
   monte_carlo_draws: 10000
   # Flip to true ONLY after a human has inspected the real-MLS fit and the

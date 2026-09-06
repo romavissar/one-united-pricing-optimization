@@ -183,6 +183,9 @@ def clean_mls(df: pd.DataFrame, config: MarketConfig) -> tuple[pd.DataFrame, Cle
         low = out["original_list_price"].notna() & (out["original_list_price"] < float(min_list))
         _drop(low, "below_min_list_price")
 
+    if "cancelled_excluded" in out.columns:
+        _drop(out["cancelled_excluded"].fillna(False).astype(bool), "cancelled_excluded")
+
     if "mls_number" in out.columns:
         dup = out["mls_number"].notna() & out["mls_number"].duplicated(keep="first")
         _drop(dup, "duplicate_mls_number")

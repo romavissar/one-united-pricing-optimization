@@ -492,3 +492,166 @@ def test_absent_binary_indicator_scores_as_zero_not_an_error(config):
     # A non-indicator covariate is still a hard error.
     with pytest.raises(SchemaError, match="missing fitted covariates"):
         transform_to_design(frame.head(50).drop(columns=["log_floor"]), model._design)
+
+
+# --- PLAN_FIX 4  CANCELED coding is a visible choice ------------------------
+
+
+def test_cancelled_treatments_are_three_distinct_codings(config):
+    """`censored`, `excluded` and `event` must actually differ, and censored
+    must reproduce the historical behaviour exactly.
+
+    27% of the export is Cancelled. The point of making the treatment a setting
+    is that the number moves with it; a setting that quietly produced the same
+    panel three times would be worse than no setting, because it would look
+    like the choice had been tested when it had not.
+    """
+    import copy
+
+    from src.data.ingest_mls import ingest_mls
+
+    panels = {}
+    for rule in ("censored", "excluded", "event"):
+        cfg = copy.deepcopy(config)
+        cfg.setdefault("defaults", {})["cancelled_treatment"] = rule
+        result = ingest_mls(market="miami", config=cfg)
+        panels[rule] = (
+            len(result.frame),
+            int(pd.to_numeric(result.frame["event_sold"]).sum()),
+            dict(result.report.filters),
+        )
+
+    rows_c, events_c, filters_c = panels["censored"]
+    rows_x, events_x, filters_x = panels["excluded"]
+    rows_e, events_e, filters_e = panels["event"]
+    dropped_x = filters_x.get("cancelled_excluded", 0)
+
+    # excluded removes the Cancelled rows and nothing else; the event count is
+    # untouched because a Cancelled row was never an event under `censored`.
+    assert "cancelled_excluded" not in filters_c
+    assert "cancelled_excluded" not in filters_e
+    assert dropped_x > 0
+    # Not `rows_c - dropped_x`: a Cancelled row that would also have failed a
+    # later filter is now dropped once instead of twice, so the waterfall shifts
+    # rather than simply lengthening. The invariant is that the same rows leave.
+    overlap = sum(v for k, v in filters_c.items() if k != "cancelled_excluded") - sum(
+        v for k, v in filters_x.items() if k != "cancelled_excluded"
+    )
+    assert overlap >= 0
+    assert rows_x == rows_c - dropped_x + overlap
+    assert events_x == events_c
+
+    # event promotes exactly the Cancelled rows to sales, keeping every row.
+    assert rows_e == rows_c
+    assert events_e == events_c + dropped_x - overlap
+
+    # and all three are genuinely different panels.
+    assert len({panels[r][:2] for r in panels}) == 3
+
+
+def test_cancelled_treatment_rejects_an_unknown_value(config):
+    """A typo must raise, not silently fall back to the default.
+
+    This value decides how a quarter of the sample is coded. Defaulting past an
+    unrecognised string would change every coefficient with no signal at all.
+    """
+    import copy
+
+    from src.config import cancelled_treatment
+
+    cfg = copy.deepcopy(config)
+    cfg["defaults"]["cancelled_treatment"] = "censoredd"
+    with pytest.raises(SchemaError, match="cancelled_treatment"):
+        cancelled_treatment(cfg)
+
+    assert cancelled_treatment({}) == "censored"
+
+
+# --- PLAN_FIX 6  `Last Status` is mapped, and is not the outcome ------------
+
+
+def test_last_status_is_mapped_and_is_not_the_outcome(config):
+    """`Last Status` is the *previous* status; `status` codes the event.
+
+    It matched a Closing Date on 1 of 16,014 sales while `Status` matched all
+    of them: every Closed row's Last Status is the pre-terminal state (Pending
+    or Active With Contract). Reading it as the outcome would score essentially
+    every completed sale as censored. It is carried so it is not an undocumented
+    unmapped column, and `event_sold` must never depend on it.
+    """
+    from src.data.ingest_mls import ingest_mls
+    from src.data.normalize import CANONICAL_OPTIONAL
+
+    assert "last_status" in CANONICAL_OPTIONAL
+
+    frame = ingest_mls(market="miami", config=config).frame
+    assert "last_status" in frame.columns
+
+    sold = pd.to_numeric(frame["event_sold"]).eq(1)
+    assert sold.any()
+
+    # event_sold is `status == SOLD` plus the documented PENDING-with-a-
+    # pending-date promotion (MLS_SCHEMA §3), and nothing else.
+    expected = frame["status"].eq("SOLD") | frame["pending_treated_as_sold"].astype(bool)
+    assert sold.equals(expected)
+
+    # The two status columns disagree on the sales, which is the whole point:
+    # `last_status` holds the state the listing was in *before* it closed.
+    labelled = frame.loc[sold, "last_status"].dropna()
+    assert len(labelled), "fixture must exercise the column"
+    # Essentially never `Closed` — 1 row in 16,014 on the 2023-2026 pull, which
+    # is why coding outcomes from this column would censor almost every sale.
+    assert labelled.eq("Closed").mean() < 0.01
+    # It holds the pre-terminal state instead.
+    assert labelled.isin(["Pending", "Active With Contract", "Active"]).mean() > 0.9
+
+
+# --- PLAN_FIX 9  building support is reported -------------------------------
+
+
+def test_ingest_reports_building_support_for_building_fe(config):
+    """`--building-fe` is only meaningful where buildings repeat.
+
+    On the single-quarter export the median building carried one listing, so a
+    per-building fixed effect fit its own row and absorbed nothing. The counts
+    have to be in the report for that to be a judgement rather than a surprise.
+    """
+    from src.data.ingest_mls import _BUILDING_FE_MIN, ingest_mls
+
+    ident = ingest_mls(market="miami", config=config).report.identification
+    for key in (
+        "buildings_named",
+        "buildings_ge_min_listings",
+        "rows_in_buildings_ge_min",
+        "median_listings_per_building",
+        "rows_missing_building_name",
+    ):
+        assert key in ident, key
+    assert ident["building_fe_min_listings"] == _BUILDING_FE_MIN
+    assert ident["buildings_ge_min_listings"] <= ident["buildings_named"]
+    # a building counted at the threshold contributes at least that many rows
+    assert (
+        ident["rows_in_buildings_ge_min"]
+        >= ident["buildings_ge_min_listings"] * _BUILDING_FE_MIN
+    )
+
+
+# --- PLAN_FIX (Batch B follow-on)  tokenized controls count as controls -----
+
+
+def test_uncontrolled_quality_note_sees_tokenized_view(config):
+    """The attenuation note must not name a control that is in the design.
+
+    `view_description` never enters the design under its own name — it is
+    tokenized into `view_*` indicators. Matching the raw name alone made the
+    report say view was uncontrolled while fifteen view indicators were fitted,
+    which inverts the note: it exists to warn that beta_price is attenuated by
+    a *missing* control.
+    """
+    from src.demand.diagnostics import _is_controlled
+
+    controlled = {"view_bay", "view_direct_ocean", "log_living_area"}
+    assert _is_controlled("view_description", controlled)
+    assert _is_controlled("log_living_area", controlled)
+    assert not _is_controlled("building_name", controlled)
+    assert not _is_controlled("view_description", {"log_living_area"})

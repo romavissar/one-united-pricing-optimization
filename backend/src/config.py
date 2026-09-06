@@ -114,6 +114,41 @@ def load_market_config(market: str) -> MarketConfig:
     return raw  # type: ignore[return-value]
 
 
+CANCELLED_TREATMENTS = ("censored", "excluded", "event")
+
+
+def cancelled_treatment(config: MarketConfig | None) -> str:
+    """How a CANCELED listing is coded in the survival panel.
+
+    27% of the quarterly export is Cancelled, and what it means is genuinely
+    ambiguous — which is why it is a setting rather than a constant.
+
+    * `censored` (default, and the historical behaviour): the listing was
+      offered, observed for its duration, and did not sell. Treats a
+      cancellation like an expiry.
+    * `excluded`: drops the rows. Appropriate if cancellations are mostly
+      administrative — a relist under a new agent, a seller changing brokerage —
+      in which case they are neither a sale nor a market rejection and carry no
+      information about demand.
+    * `event`: codes them as sales. Only defensible if cancellations are
+      predominantly off-market transactions, which nothing in this data
+      supports; provided so the assumption can be *tested* rather than argued
+      about.
+
+    Raises:
+        SchemaError: on an unknown value, rather than silently defaulting —
+            a typo here would quietly change every coefficient.
+    """
+    value = str(((config or {}).get("defaults") or {}).get("cancelled_treatment", "censored"))
+    if value not in CANCELLED_TREATMENTS:
+        raise SchemaError(
+            f"cancelled_treatment must be one of {list(CANCELLED_TREATMENTS)}, "
+            f"got {value!r}. This decides how 27% of the sample is coded, so an "
+            "unrecognised value is not something to guess past."
+        )
+    return value
+
+
 def zip_to_submarket(zip_code: str | None, config: MarketConfig) -> str | None:
     """Map a 5-digit ZIP string to a submarket id from market config.
 

@@ -198,6 +198,56 @@ value, and check prefixes since MLS systems abbreviate.
   right-censoring. Scoring these as sales converts still-open listings into
   completed ones and biases the hazard upward — 217 rows on the 2023–2026 pull.
 
+### `Last Status` is mapped but never codes an outcome
+
+The export carries a second status column, `Last Status`, filled on 87.7% of rows.
+It is normalized to `last_status` so it stops landing in `_unmapped` with no
+semantics, but **nothing reads it for event coding.** That is deliberate.
+
+`Last Status` is the *previous* status, not a competing view of the current one.
+Cross-tabbed against the hard evidence of a `Closing Date`
+(`audit/r04_last_status.py`):
+
+| Column | Agrees with `Closing Date` on a sale | Claims a sale with no closing date |
+|---|---|---|
+| `Status` | 16,014 / 16,014 | 0 |
+| `Last Status` | 1 / 16,014 | 0 |
+
+Every `Closed` row has a `Last Status` of `Pending` (10,744) or
+`Active With Contract` (4,419) — the state the listing was in immediately before
+it closed. Reading it as the outcome would score essentially every completed sale
+as censored.
+
+Its one genuine use is diagnostic, not structural: among `Cancelled` listings,
+11,101 have a `Last Status` of `Active` (a plain withdrawal) while 338 reached
+`Pending` (246) or `Active With Contract` (92) before cancelling — a contract that
+fell through, which is a different event from a unit the market ignored. That
+distinction is available to anyone investigating `defaults.cancelled_treatment`
+(§3.1); it is not currently wired into the coding.
+
+### `CANCELED` coding is a configured choice, not a constant
+
+27% of the quarterly export is `Cancelled`, and the status is genuinely
+ambiguous — a relist under a new agent, a brokerage change, and a seller giving
+up all look the same. `defaults.cancelled_treatment` selects between
+`censored` (the default and the historical behaviour), `excluded` (drop the rows
+as administrative noise), and `event` (score them as off-market sales). An
+unrecognised value raises rather than defaulting.
+
+The choice is material and `python -m src.demand.diagnostics --cancelled-sweep`
+refits under all three so it is visible rather than assumed. On the 2023–2026
+pull:
+
+| Treatment | Rows fitted | Events | `beta_price` | 95% CI |
+|---|---|---|---|---|
+| `censored` (default) | 44,591 | 16,176 | −0.4310 | [−0.4795, −0.3824] |
+| `excluded` | 32,562 | 16,176 | −0.3994 | [−0.4474, −0.3513] |
+| `event` | 44,591 | 29,070 | −0.2336 | [−0.2659, −0.2012] |
+
+The sign and the exclusion of zero survive all three; the magnitude moves by a
+factor of 1.8. Any statement about the *size* of the elasticity therefore has to
+name the treatment it was computed under.
+
 ---
 
 ## 4. Floor parsing from `unit_number`

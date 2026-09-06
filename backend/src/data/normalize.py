@@ -17,7 +17,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.config import MarketConfig, load_market_config, zip_to_submarket
+from src.config import (
+    MarketConfig,
+    cancelled_treatment,
+    load_market_config,
+    zip_to_submarket,
+)
 from src.exceptions import SchemaError
 
 logger = logging.getLogger(__name__)
@@ -51,6 +56,7 @@ CANONICAL_OPTIONAL = (
     "cumulative_days_on_market",
     "pending_date",
     "status_change_date",
+    "last_status",
     "baths_half",
     "year_built",
     "new_construction",
@@ -190,6 +196,10 @@ _ALIAS_TABLE: dict[str, tuple[str, ...]] = {
         "Cancel Date",
     ),
     "status_change_date": ("StatusChangeDate", "Status Change Date"),
+    # The status a listing held *before* its current one. Mapped so it stops
+    # sitting in `_unmapped` with undocumented semantics, and explicitly NOT
+    # used for outcome coding — see `last_status` in MLS_SCHEMA.md §3.
+    "last_status": ("LastStatus", "Last Status", "Previous Status"),
     "days_on_market": (
         "DaysOnMarket",
         "DOM",
@@ -1565,6 +1575,8 @@ def normalize_mls(
     duration_sources: list[str | None] = []
     events: list[int] = []
     pending_as_sold: list[bool] = []
+    cancelled_drop: list[bool] = []
+    cancelled_rule = cancelled_treatment(cfg)
     floor_rejected = 0
 
     floor_resolution: dict[str, int] = {}
@@ -1631,7 +1643,15 @@ def normalize_mls(
                 pending_flag = True
         pending_as_sold.append(pending_flag)
 
-        # For survival event flag: PENDING-as-sold counts as event.
+        # For survival event flag: PENDING-as-sold counts as event. A CANCELED
+        # listing is coded per `defaults.cancelled_treatment` — see
+        # `config.cancelled_treatment` for why that is a setting and not a
+        # constant. `excluded` marks the row here and drops it in cleaning, so
+        # the count appears in the filters waterfall rather than vanishing.
+        if status == "CANCELED" and cancelled_rule == "event":
+            treat_sold = True
+        cancelled_drop.append(status == "CANCELED" and cancelled_rule == "excluded")
+
         effective_status = "SOLD" if treat_sold else status
         events.append(1 if effective_status == "SOLD" else 0)
 
@@ -1658,6 +1678,10 @@ def normalize_mls(
     typed["duration_source"] = duration_sources
     typed["event_sold"] = events
     typed["pending_treated_as_sold"] = pending_as_sold
+    # Marked here, dropped in cleaning, so the count lands in the filters
+    # waterfall instead of the rows quietly disappearing.
+    typed["cancelled_excluded"] = cancelled_drop
+    typed["cancelled_treatment"] = cancelled_rule
 
     if report.unmapped_headers:
         logger.info(

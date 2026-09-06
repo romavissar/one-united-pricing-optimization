@@ -355,6 +355,13 @@ def build_ingest_report(
         usable = int((req_ok & dur_ok & sub_ok).sum())
     identification["usable_rows_required_duration_submarket"] = usable
 
+    # Within-building support. `--building-fe` absorbs a fixed effect per
+    # building, which only buys anything where a building has several listings to
+    # compare across; on the single-quarter export the median building carried
+    # one listing and the option was decorative. Reporting the cardinality makes
+    # that judgement visible instead of leaving it to be rediscovered.
+    identification.update(_building_support(frame))
+
     sampling, sampling_warnings = build_sampling_report(frame, rows_in, raw_status)
     warnings.extend(sampling_warnings)
 
@@ -405,6 +412,42 @@ def build_ingest_report(
         list_ppsf_implausible=clean.list_ppsf_implausible,
         list_date_recovered=list_date_recovered,
     )
+
+
+_BUILDING_FE_MIN = 5
+
+
+def _building_support(frame: pd.DataFrame) -> dict[str, Any]:
+    """Cardinality of the building key and how many buildings are usable as FE.
+
+    Reports against `building_name` where present, since that is the key
+    `--building-fe` groups on. A building with a single listing contributes a
+    fixed effect that fits its own row exactly and no comparison at all, so the
+    count at `>= _BUILDING_FE_MIN` is the honest measure of whether the option
+    has anything to absorb.
+    """
+    out: dict[str, Any] = {
+        "buildings_named": 0,
+        "buildings_ge_min_listings": 0,
+        "building_fe_min_listings": _BUILDING_FE_MIN,
+        "rows_in_buildings_ge_min": 0,
+        "median_listings_per_building": None,
+        "rows_missing_building_name": int(len(frame)),
+    }
+    if "building_name" not in frame.columns or not len(frame):
+        return out
+    named = frame["building_name"].astype("string").str.strip()
+    named = named.where(named.notna() & (named != ""), pd.NA)
+    counts = named.dropna().value_counts()
+    out["rows_missing_building_name"] = int(named.isna().sum())
+    if counts.empty:
+        return out
+    big = counts[counts >= _BUILDING_FE_MIN]
+    out["buildings_named"] = int(len(counts))
+    out["buildings_ge_min_listings"] = int(len(big))
+    out["rows_in_buildings_ge_min"] = int(big.sum())
+    out["median_listings_per_building"] = float(counts.median())
+    return out
 
 
 def build_sampling_report(
@@ -614,6 +657,17 @@ def format_inspect_report(report: IngestReport) -> str:
     lines.append(
         f"  usable rows (REQUIRED + duration + submarket): "
         f"{ident.get('usable_rows_required_duration_submarket')}"
+    )
+    lines.append(
+        f"  buildings named: {ident.get('buildings_named')}  "
+        f"(median {ident.get('median_listings_per_building')} listings each; "
+        f"{ident.get('rows_missing_building_name')} rows unnamed)"
+    )
+    lines.append(
+        f"  buildings with >= {ident.get('building_fe_min_listings')} listings: "
+        f"{ident.get('buildings_ge_min_listings')} "
+        f"covering {ident.get('rows_in_buildings_ge_min')} rows "
+        f"— the support --building-fe has to work with"
     )
     lines.append(f"  note: {ident.get('note')}")
     lines.append("")
