@@ -387,3 +387,108 @@ def test_property_percentiles_ordered_and_cvar_below_p5(sample):
 def test_property_summarize_rejects_an_empty_sample():
     with pytest.raises(SchemaError):
         summarize(np.array([]))
+
+
+# --- Batch B: encoding and silent-fallback guards ---------------------------
+
+
+def test_no_single_field_dominates_the_design_matrix(config):
+    """`view_description` once took 420 of 443 design columns as a raw category.
+
+    A comma-separated MLS field is not one categorical level — `Unit View` reads
+    "Bay, Skyline View, Water View", three facts about the unit. Treated as a
+    category it had 1,139 distinct values on the quarterly pull and consumed 95%
+    of the design while pooling 694 levels into `__rare__`; the 16 atomic
+    indicators that carry the same signal went unused.
+
+    The assertion is on the *class* of defect, not the instance: no source field
+    may dominate the design, whichever field a future export introduces.
+    """
+    from collections import Counter
+
+    from src.data.ingest_mls import ingest_mls
+    from src.data.features import DEMAND_COVARIATES
+    from src.demand.survival import (
+        CONTROLLED_CATEGORICALS, CoxDemandModel, available_covariates,
+    )
+
+    built = build_features(ingest_mls(market="miami", config=config).frame, config)
+    frame = built.frame
+    result = CoxDemandModel(
+        covariates=available_covariates(frame),
+        categoricals=CONTROLLED_CATEGORICALS,
+        premium_model=built.premium_model,
+    ).fit(frame)
+
+    columns = result.design.X.columns
+    by_source = Counter(c.split("=")[0] for c in columns)
+    worst, count = by_source.most_common(1)[0]
+    assert count <= 20, (
+        f"{worst} takes {count} of {len(columns)} design columns — a multi-valued "
+        "field is being encoded as a raw categorical again"
+    )
+    # The view signal must still be present, as indicators.
+    assert any(c.startswith("view_") for c in columns)
+
+
+def test_losing_the_premium_model_raises_instead_of_falling_back(config):
+    """`frame.attrs` does not survive `pd.concat`, and the fallback is wrong.
+
+    `rel_price_premium` is a residual against the list-price hedonic, so scoring
+    a price against the submarket median instead measures the coefficient
+    against a quantity it was never fitted on. That produces entirely plausible
+    numbers with no warning, which is the failure this guard exists to prevent.
+    """
+    from src.data.ingest_mls import ingest_mls
+    from src.data.features import DEMAND_COVARIATES
+    from src.demand.survival import CoxDemandModel
+    from src.exceptions import IdentificationError
+
+    frame = build_features(
+        ingest_mls(market="miami", config=config).frame, config
+    ).frame
+    assert "premium_model" in frame.attrs
+
+    # concat is the realistic way it gets lost.
+    stripped = pd.concat([frame.head(4000), frame.tail(4000)])
+    assert "premium_model" not in stripped.attrs
+
+    with pytest.raises(IdentificationError, match="premium model"):
+        CoxDemandModel(covariates=DEMAND_COVARIATES).fit(stripped)
+
+
+def test_absent_binary_indicator_scores_as_zero_not_an_error(config):
+    """An inventory exercising fewer view tokens than the fit must still score.
+
+    A fit that saw nine view tokens can price an inventory that carries three:
+    the six it lacks are zero, because the unit does not have that view. That is
+    replaying the fit's vocabulary, not imputing — which is why it is restricted
+    to columns that were strictly binary at fit time. A missing `log_floor` is a
+    gap and must still raise.
+    """
+    from src.data.ingest_mls import ingest_mls
+    from src.data.features import DEMAND_COVARIATES
+    from src.demand.base import transform_to_design
+    from src.demand.survival import CoxDemandModel, available_covariates
+    from src.exceptions import SchemaError
+
+    built = build_features(ingest_mls(market="miami", config=config).frame, config)
+    frame = built.frame
+    model = CoxDemandModel(
+        covariates=available_covariates(frame), premium_model=built.premium_model
+    )
+    model.fit(frame)
+
+    scoring = frame.head(200).copy()
+    view_columns = [c for c in scoring.columns if c.startswith("view_")]
+    assert view_columns, "fixture must exercise the token path"
+    scoring = scoring.drop(columns=view_columns[:3])
+    encoded, usable = transform_to_design(scoring, model._design)
+    assert usable.any()
+    for column in view_columns[:3]:
+        if column in encoded.columns:
+            assert (encoded[column] == 0.0).all()
+
+    # A non-indicator covariate is still a hard error.
+    with pytest.raises(SchemaError, match="missing fitted covariates"):
+        transform_to_design(frame.head(50).drop(columns=["log_floor"]), model._design)

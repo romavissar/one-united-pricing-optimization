@@ -182,10 +182,26 @@ listings are still ACTIVE, and the files are not status-sorted. They earn their
 place as regression guards: they would catch a future re-pull that reintroduced
 either defect, and there is a test pinning that they do not fire on good data.
 
-**Repository.** `git init`, first commit, 113 files.
-`.gitignore` now covers `.env`, `.env.*`, a bare `env`, `*.env`, and — newly —
-the repo-root `/data/`, which held a **30 MB copy of the licensed MLS exports
-that `git add -A` staged**. That is caught and excluded; see §5.
+**Repository.** `git init`, first commit, 113 files. `.gitignore` covered
+`.env`, `.env.*`, a bare `env`, `*.env`, and the repo-root `/data/`, which held
+a **30 MB copy of the licensed MLS exports that `git add -A` staged** — caught
+and excluded at the time; see §5.
+
+> **Superseded as of `ab0d20d`.** A later commit, *"Track MLS and pipeline data;
+> keep secrets out of the repo"*, removed the `/data/` rule deliberately and
+> committed the exports "for a complete handoff". Tracked and **pushed to
+> `origin/main`** as of this writing: `data/` (15 quarterly CSVs), an identical
+> copy under `backend/data/raw/mls/`, and `backend/data/raw/mls_old/PRICING_MODEL_export.csv`
+> — roughly 62 MB of licensed MIAMI Association of Realtors records with street
+> addresses. `.env` remains untracked, so no secrets are exposed. The same commit
+> also stopped tracking `.env.example`, which should be restored.
+>
+> This is the exact scenario `AUDIT_BRIEF.md` §7.4 flags. Deleting the files in a
+> new commit does not remove them from history; undoing it needs a history
+> rewrite and a force-push, and GitHub retains unreferenced objects until asked
+> to purge them. Tracked as item 0 in `PLAN_FIX.md`, pending a decision on
+> whether to purge history, make the repository private, or confirm the broker's
+> terms permit redistribution.
 
 **Dependency scan.** `pip-audit` against OSV: **no known vulnerabilities**, both
 for the installed environment and for `requirements.txt`. `requirements.txt` is

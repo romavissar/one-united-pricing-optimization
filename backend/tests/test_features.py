@@ -291,9 +291,15 @@ def test_export_like_profile_builds_without_its_absent_columns(config) -> None:
 
     corr = result.report.corr_rel_price_premium_event_sold
     assert corr is not None and corr < 0, corr
-    # Quality-dominated cells must trip the wide guard, not the narrow one.
-    assert any("TOO WIDE" in w for w in result.report.warnings)
+    # The wide-IQR guard is for the cell-median variable, where dispersion is
+    # evidence the cell pools studios with penthouses. A hedonic residual is
+    # orthogonal to unit characteristics by construction, so its spread is
+    # price dispersion and firing here would attach a true number to a false
+    # explanation. What must be reported instead is the respecification itself.
     assert not any("TOO NARROW" in w for w in result.report.warnings)
+    assert not any("TOO WIDE" in w for w in result.report.warnings)
+    assert any("IDENTIFICATION VARIABLE RESPECIFIED" in w for w in result.report.warnings)
+    assert result.report.hedonic_premium["r_squared"] > 0.0
 
 
 def test_narrow_variation_trips_the_narrow_guard(config) -> None:
@@ -319,7 +325,13 @@ def test_real_export_features_report_honestly(config) -> None:
     report = result.report
 
     assert report.rel_price_premium["iqr"] > 0.03
-    assert any("TOO WIDE" in w for w in report.warnings)
+    # See above: the wide guard does not apply to a residual. The report must
+    # instead say what the first stage explained, which is the honest measure of
+    # how much unit quality was removed from the identifying variable.
+    assert not any("TOO WIDE" in w for w in report.warnings)
+    assert any("IDENTIFICATION VARIABLE RESPECIFIED" in w for w in report.warnings)
+    assert 0.0 < report.hedonic_premium["r_squared"] < 1.0
+    assert report.hedonic_premium["residual_sd_log"] > 0.0
     # The fallback ladder is genuinely exercised by this export.
     assert report.median_basis_counts.get("submarket_quarter", 0) > 0
     assert report.median_basis_counts.get("insufficient", 0) > 0

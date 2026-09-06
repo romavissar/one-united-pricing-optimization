@@ -785,8 +785,25 @@ def test_a_cox_model_fitted_on_synthetic_data_drives_a_real_plan(units, config):
     assert result.units_released > 0
     assert check_monotone(result, units) == []
     assert result.provenance["is_calibrated_on_real_data"] is False
-    # A negative elasticity should keep at least some units off the ceiling.
-    assert min(row.level_index for row in result.plan) < tensor.n_levels - 1
+    # This used to assert some unit sat below its ceiling, on the reasoning that
+    # a negative elasticity must produce an interior optimum. That proxy stopped
+    # being valid once the ladder was clamped to the fitted premium support:
+    # confined to [-0.28, +0.38], P(sale) falls only 0.825 -> 0.670 across the
+    # whole admissible band, so `p * D(p)` is monotone and the ceiling is the
+    # genuine argmax for every unit at this beta. The corner solution is the
+    # correct answer here, and the system's job is to *say so* rather than to
+    # avoid it — which the ceiling alarm does.
+    #
+    # The claim the old assertion was standing in for — that beta actually
+    # reaches the objective — is tested directly and more strongly by
+    # `test_elastic_demand_produces_materially_lower_prices` and
+    # `test_zero_elasticity_pushes_every_unit_to_its_ceiling`.
+    at_ceiling = sum(1 for r in result.plan if r.level_index == tensor.n_levels - 1)
+    if at_ceiling / len(result.plan) >= 0.5:
+        assert any("price ceiling" in c for c in result.caveats), (
+            f"{at_ceiling} of {len(result.plan)} units sit at their ceiling and "
+            "nothing said so; the corner-solution caveat must fire"
+        )
     for row in result.plan:
         i = tensor.unit_ids.index(row.unit_id)
         assert ladder.p_floor_ppsf[ladder.index_of(row.unit_id)] <= row.price_ppsf

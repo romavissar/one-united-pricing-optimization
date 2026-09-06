@@ -115,7 +115,8 @@ def fit_demand(
         ingested = ingest_mls(
             paths=files, market=request.market, raw_dir=raw_dir, config=cfg
         )
-        frame = build_features(ingested.frame, cfg).frame
+        built = build_features(ingested.frame, cfg)
+        frame, premium_fit = built.frame, built.report.hedonic_premium
         source_paths = [str(p) for p in (files or [raw_dir])]
         rows = len(ingested.frame)
         planted = None
@@ -129,7 +130,8 @@ def fit_demand(
             ingested = ingest_mls(
                 paths=files, market=request.market, raw_dir=request.directory, config=cfg
             )
-            frame = build_features(ingested.frame, cfg).frame
+            built = build_features(ingested.frame, cfg)
+            frame, premium_fit = built.frame, built.report.hedonic_premium
             source_paths = [str(p) for p in (files or [request.directory])]
             rows = len(ingested.frame)
             planted = None
@@ -140,9 +142,10 @@ def fit_demand(
                 market=request.market,
                 profile="rich",
             )
-            frame = build_features(
+            built = build_features(
                 normalize_mls(synthetic.frame, config=cfg).frame, cfg
-            ).frame
+            )
+            frame, premium_fit = built.frame, built.report.hedonic_premium
             source_paths = [
                 f"synthetic:seed={request.seed}:n={request.n_listings}"
             ]
@@ -227,6 +230,7 @@ def fit_demand(
         logistic=logit,
         logistic_result=logit_result,
         hedonic=surface,
+        premium_fit=premium_fit,
     )
     target = save_bundle(bundle, name=request.name)
     return FitOutcome(

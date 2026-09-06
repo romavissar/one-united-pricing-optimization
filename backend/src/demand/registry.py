@@ -104,6 +104,10 @@ class ModelBundle:
     logistic: Any = None
     logistic_result: FitResult | None = None
     hedonic: Any = None
+    # Diagnostics of the list-price hedonic whose residual IS the identifying
+    # variable. Without this a saved bundle cannot say what its own
+    # `rel_price_premium` was built from.
+    premium_fit: dict[str, Any] | None = None
 
     @property
     def beta_price(self) -> float:
@@ -147,6 +151,9 @@ def build_metadata(bundle: ModelBundle) -> dict[str, Any]:
             "matrix": [[float(v) for v in row] for row in covariance.to_numpy()],
             "units": "raw covariate units, matching the reported coefficients",
         }
+
+    if bundle.premium_fit:
+        metadata["premium_hedonic"] = bundle.premium_fit
 
     if bundle.hedonic is not None:
         metadata["hedonic"] = {

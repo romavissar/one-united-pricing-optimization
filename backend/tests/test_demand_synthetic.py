@@ -134,8 +134,14 @@ def _planted(frame: pd.DataFrame) -> pd.DataFrame:
 
 def _fit_cox(frame: pd.DataFrame, *, controlled: bool = False, fixed_effects: bool = False):
     frame = _planted(frame)
+    # The controlled arm resolves its covariates the way production does, via
+    # `available_covariates`, rather than from the bare constant. That matters
+    # since the amenity controls became indicator blocks: `CONTROLLED_COVARIATES`
+    # no longer names them, `available_covariates` appends whichever ones the
+    # export carries, and a test that skipped it would measure a specification
+    # nothing actually runs.
     model = CoxDemandModel(
-        covariates=CONTROLLED_COVARIATES if controlled else DEMAND_COVARIATES,
+        covariates=available_covariates(frame) if controlled else DEMAND_COVARIATES,
         categoricals=CONTROLLED_CATEGORICALS if controlled else ("submarket", "season"),
         building_fixed_effects=fixed_effects,
     )

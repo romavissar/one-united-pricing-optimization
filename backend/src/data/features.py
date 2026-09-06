@@ -54,12 +54,6 @@ _FLOOR_BUCKET_EDGES = ((1, 5, "low"), (6, 12, "mid"), (13, 25, "high"))
 _FLOOR_BUCKET_TOP = "tower"
 _SIZE_BUCKET_COUNT = 4
 
-# Sanity band for monthly HOA in $/sqft, not an estimate. Miami condo dues run
-# roughly $0.6-$2.5/sqft/month; above the ceiling the figure is almost always an
-# annual fee in a column labelled monthly, which is the units confusion
-# AGENTS.md calls the most likely silent numeric bug in this codebase.
-_HOA_PSF_MONTHLY_BOUNDS = (0.05, 5.0)
-
 _NEW_CONSTRUCTION_MAX_AGE_YEARS = 2
 
 # PROJECT_BRIEF §3d: below this, sellers priced identically and elasticity is
@@ -89,7 +83,7 @@ class FeatureReport:
     rel_price_premium: dict[str, float] = field(default_factory=dict)
     corr_rel_price_premium_event_sold: float | None = None
     null_rates: dict[str, float] = field(default_factory=dict)
-    hoa_units_suspect: int = 0
+    hoa_negative: int = 0
     new_construction_sources: dict[str, int] = field(default_factory=dict)
     usable_rows: int = 0
     hedonic_premium: dict[str, Any] = field(default_factory=dict)
@@ -98,10 +92,20 @@ class FeatureReport:
 
 @dataclass
 class FeatureResult:
-    """Feature frame plus its report."""
+    """Feature frame plus its report.
+
+    `premium_model` is returned explicitly rather than only stashed on
+    `frame.attrs`, because `attrs` does not survive `pd.concat`. Losing it
+    silently is the dangerous case: `rel_price_premium` is a residual against
+    this surface, so a caller that fits without it ends up with a coefficient
+    measured against one reference and applied against another — wrong units,
+    entirely plausible numbers, no warning. `CoxDemandModel.fit` now raises in
+    that situation instead.
+    """
 
     frame: pd.DataFrame
     report: FeatureReport
+    premium_model: Any | None = None
 
 
 def _season(list_date: pd.Series) -> pd.Series:
@@ -366,6 +370,23 @@ def tokenize_multivalue(series: pd.Series, prefix: str, *, min_share: float = _T
         column = f"{prefix}_{re.sub(r'[^a-z0-9]+', '_', token.lower()).strip('_')}"
         out[column] = exploded.apply(lambda parts, t=token: float(t in parts))
     out[f"{prefix}_missing"] = (~present).astype("float64")
+
+    # If every row carries exactly one token the field is not really
+    # multi-valued — it is a plain categorical wearing indicator clothes, and
+    # the indicators sum to 1 on every row. That is the dummy-variable trap: the
+    # block is collinear with any constant in the design and the Cox partial
+    # likelihood fails with "singular matrix". Real MLS view data does not
+    # partition (a listing has one to three views) so nothing is dropped there,
+    # but the synthetic generator emits exactly one view per listing and does.
+    # Drop the most common token as the reference, the same treatment a
+    # categorical gets, and say which one so the coefficients stay readable.
+    row_totals = out.sum(axis=1)
+    if len(out.columns) > 1 and bool((row_totals == 1.0).all()):
+        reference = max(kept, key=lambda t: counts[t]) if kept else None
+        if reference is not None:
+            column = f"{prefix}_{re.sub(r'[^a-z0-9]+', '_', reference.lower()).strip('_')}"
+            out = out.drop(columns=[column])
+            out.attrs["reference_token"] = reference
     return out
 
 
@@ -494,6 +515,7 @@ def build_features(
     # against each other and the change in beta_price decomposed.
     out["cell_median_premium"] = out["rel_price_premium"]
     premium_fit = None
+    premium_model = None
     try:
         premium = fit_price_premium(out)
         out["hedonic_price_premium"] = premium.premium_log
@@ -502,6 +524,7 @@ def build_features(
         out["hedonic_price_premium_source"] = premium.source
         premium_fit = premium.fit
         out.attrs["premium_model"] = premium.model
+        premium_model = premium.model
         # Ship it. `rel_price_premium` is the name the whole downstream stack
         # reads, so the respecification takes effect by replacing what that name
         # means rather than by threading a new column through six modules. The
@@ -528,7 +551,11 @@ def build_features(
         out["hedonic_reference_ppsf"] = np.nan
         out["hedonic_price_premium_source"] = "unavailable"
 
-    return FeatureResult(frame=out, report=build_feature_report(out, premium_fit))
+    return FeatureResult(
+        frame=out,
+        report=build_feature_report(out, premium_fit),
+        premium_model=premium_model,
+    )
 
 
 def build_feature_report(
@@ -566,7 +593,10 @@ def build_feature_report(
         if col in frame.columns
     }
 
-    hoa_suspect = int((frame["hoa_per_sqft_source"] == "implausible").sum())
+    # Only arithmetic can make an HOA rate unusable now that the field is
+    # confirmed monthly: a negative fee is not a fee. The old "implausible"
+    # bucket is gone with the plausibility band.
+    hoa_negative = int((frame["hoa_per_sqft_source"] == "negative").sum())
     nc_sources = {
         str(k): int(v)
         for k, v in frame["is_new_construction_source"].value_counts(dropna=False).items()
@@ -591,7 +621,18 @@ def build_feature_report(
             "Sellers priced near-identically relative to comps; elasticity will be "
             "weakly identified regardless of sample size."
         )
-    if iqr is not None and iqr > _REL_PREMIUM_IQR_WIDE:
+    # The wide-IQR alarm only means anything for the cell-median variable, where
+    # dispersion is evidence that the cell is pooling studios with penthouses.
+    # A hedonic residual is orthogonal to unit characteristics by construction,
+    # so its spread is price dispersion and nothing else — firing here would
+    # attach a true number to a false explanation. The diagnostic that does
+    # carry over is `quality_explained_share` in the identification report,
+    # which measures the contamination directly instead of inferring it.
+    spec_is_residual = (
+        "rel_price_premium_spec" in frame.columns
+        and (frame["rel_price_premium_spec"].astype(str) == "hedonic_residual").any()
+    )
+    if iqr is not None and iqr > _REL_PREMIUM_IQR_WIDE and not spec_is_residual:
         warnings.append(
             f"PRICING VARIATION TOO WIDE — rel_price_premium IQR is {iqr:.4f}. "
             "A (submarket, month) cell this dispersed is not holding the unit fixed, "
@@ -606,11 +647,11 @@ def build_feature_report(
             "(submarket, month) or (submarket, quarter) median and carry a null "
             "rel_price_premium. They cannot enter the demand fit."
         )
-    if hoa_suspect:
+    if hoa_negative:
         warnings.append(
-            f"HOA UNITS SUSPECT — {hoa_suspect} rows have an implied HOA outside "
-            f"${_HOA_PSF_MONTHLY_BOUNDS[0]}-${_HOA_PSF_MONTHLY_BOUNDS[1]}/sqft/month and were "
-            "nulled. Likely annual fees in a monthly column; request hoa_frequency."
+            f"NEGATIVE HOA — {hoa_negative} rows report a negative association fee "
+            "and carry a null hoa_per_sqft. A negative fee is a data error, not a "
+            "credit; check the source column."
         )
     if corr is not None and corr >= 0:
         warnings.append(
@@ -636,7 +677,7 @@ def build_feature_report(
         rel_price_premium=stats,
         corr_rel_price_premium_event_sold=corr,
         null_rates=null_rates,
-        hoa_units_suspect=hoa_suspect,
+        hoa_negative=hoa_negative,
         new_construction_sources=nc_sources,
         usable_rows=usable,
         warnings=warnings,
@@ -670,7 +711,8 @@ def format_feature_report(report: FeatureReport) -> str:
     lines.append("SOURCES")
     for k, v in report.new_construction_sources.items():
         lines.append(f"  is_new_construction {k}: {v}")
-    lines.append(f"  hoa_per_sqft implausible (nulled): {report.hoa_units_suspect}")
+    if report.hoa_negative:
+        lines.append(f"  hoa_per_sqft negative (nulled): {report.hoa_negative}")
     lines.append(
         f"  penthouses with no numeric floor (excluded from fit): "
         f"{report.penthouses_without_floor}"

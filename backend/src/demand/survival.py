@@ -71,28 +71,80 @@ _FE_MIN_ROWS_PER_LEVEL = 40.0
 # export carries it. Whatever these do not explain stays inside
 # rel_price_premium as unobserved quality and biases beta_price toward zero.
 CONTROLLED_COVARIATES: tuple[str, ...] = tuple(
-    [c for c in DEMAND_COVARIATES if c != "living_area_sqft"]
-    + ["log_living_area", "view_description"]
+    [c for c in DEMAND_COVARIATES if c != "living_area_sqft"] + ["log_living_area"]
 )
-CONTROLLED_CATEGORICALS: tuple[str, ...] = (*DEFAULT_CATEGORICALS, "view_description")
+CONTROLLED_CATEGORICALS: tuple[str, ...] = DEFAULT_CATEGORICALS
+
+# Multi-valued MLS fields reach the model as indicator blocks built in
+# `features.py`, never as raw strings. `Unit View` reads
+# "Bay, Skyline View, Water View" — three facts about the unit, not one
+# categorical level. Treated as a category it has 1,139 distinct values on the
+# 2023-2026 pull and consumed 420 of 443 design columns while pooling 694
+# levels into `__rare__`; split into atoms it has 17, of which `Direct Ocean`
+# is a materially different and more valuable thing from `Ocean View`. Same
+# rule the list-price hedonic already follows.
+# Only `view_`. The waterfront, parking and restriction blocks stay in the
+# list-price hedonic — which explains what sellers ask and is fitted on MLS
+# listings — but must not enter the demand model, because a developer's
+# inventory carries no such fields and every unit would become unscorable.
+# That asymmetry is the same reference-comparability problem tracked as R2 in
+# `PLAN_FIX.md`; narrowing here keeps the demand model scorable against the
+# schema `inventory_scoring_frame` can actually produce.
+TOKEN_COVARIATE_PREFIXES: tuple[str, ...] = ("view_",)
+
+
+def token_covariates(
+    frame: pd.DataFrame, prefixes: Sequence[str] = TOKEN_COVARIATE_PREFIXES
+) -> tuple[str, ...]:
+    """Indicator columns produced by `tokenize_multivalue`, in a stable order.
+
+    Selected by prefix rather than named in a constant because which tokens
+    clear the frequency threshold depends on the export.
+    """
+    return tuple(
+        sorted(
+            c
+            for c in frame.columns
+            if any(c.startswith(p) for p in prefixes)
+            and pd.api.types.is_numeric_dtype(frame[c])
+            and frame[c].notna().any()
+        )
+    )
+
+
+def _premium_is_residual(frame: pd.DataFrame) -> bool:
+    """True when the frame's premium is a hedonic residual, not a cell-median ratio."""
+    column = frame.get("rel_price_premium_spec")
+    if column is None:
+        return False
+    return bool((column.astype(str) == "hedonic_residual").any())
 
 
 def available_covariates(
-    frame: pd.DataFrame, covariates: Sequence[str] = CONTROLLED_COVARIATES
+    frame: pd.DataFrame,
+    covariates: Sequence[str] = CONTROLLED_COVARIATES,
+    *,
+    include_tokens: bool = True,
 ) -> tuple[str, ...]:
     """Filter a covariate list to the columns this export actually carries.
 
     An all-null column counts as absent. Normalization fills every canonical
-    field the export omitted with nulls, so `view_description` is present and
-    empty on the Miami pull rather than missing; keeping it would delete the
-    entire sample through listwise deletion.
+    field the export omitted with nulls, so a field the export lacks is present
+    and empty rather than missing; keeping it would delete the entire sample
+    through listwise deletion.
 
-    Dropping it is honest — the view premium is still in the price, it is simply
-    unobserved — but the caller has to record that it happened, because an
-    unobserved hedonic is a direct attenuation of `beta_price`. `run_diagnostics`
-    reports exactly that.
+    Dropping one is honest — the premium it carries is still in the price, it is
+    simply unobserved — but the caller has to record that it happened, because
+    an unobserved hedonic is a direct attenuation of `beta_price`.
+    `run_diagnostics` reports exactly that.
+
+    Amenity indicators are appended when present, so the view signal enters as
+    ~17 binary columns rather than as a 1,139-level string.
     """
-    return tuple(c for c in covariates if c in frame.columns and frame[c].notna().any())
+    present = tuple(c for c in covariates if c in frame.columns and frame[c].notna().any())
+    if not include_tokens:
+        return present
+    return present + token_covariates(frame)
 
 
 class CoxDemandModel:
@@ -118,6 +170,7 @@ class CoxDemandModel:
         building_fixed_effects: bool = False,
         penalizer: float = 0.0,
         min_level_count: int = MIN_LEVEL_COUNT,
+        premium_model: Any = None,
     ) -> None:
         self.covariates = tuple(covariates)
         self.categoricals = tuple(categoricals)
@@ -131,8 +184,10 @@ class CoxDemandModel:
         self._max_duration_days: float | None = None
         # The list-price hedonic whose residual is `rel_price_premium`. Carried
         # on the model so that scoring measures a candidate price against the
-        # same reference the coefficient was fitted against.
-        self.premium_model: Any = None
+        # same reference the coefficient was fitted against. Pass it explicitly
+        # from `FeatureResult.premium_model`; the `frame.attrs` lookup in `fit`
+        # is a fallback that `pd.concat` can defeat.
+        self.premium_model: Any = premium_model
 
     # --- fitting ---------------------------------------------------------
     @property
@@ -291,6 +346,16 @@ class CoxDemandModel:
         self._max_duration_days = float(fit_frame[DURATION_COL].max())
         if self.premium_model is None:
             self.premium_model = frame.attrs.get("premium_model")
+        if self.premium_model is None and _premium_is_residual(frame):
+            raise IdentificationError(
+                "This frame's rel_price_premium is a hedonic residual, but no "
+                "premium model reached the fit — `frame.attrs` does not survive "
+                "pd.concat and none was passed explicitly. Continuing would fit "
+                "beta_price against one reference and later score prices against "
+                "another (the submarket median), which is a units error that "
+                "produces entirely plausible numbers. Pass "
+                "`FeatureResult.premium_model` into CoxDemandModel."
+            )
         # Recorded over the rows that survived listwise deletion, not the input
         # frame: those are the listings the coefficient is actually evidence
         # about. Downstream, the optimizer checks its prices against this.

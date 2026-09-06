@@ -281,6 +281,19 @@ def inventory_scoring_frame(units: pd.DataFrame) -> pd.DataFrame:
     if "view" in out.columns and "view_description" not in out.columns:
         out["view_description"] = out["view"]
 
+    # The demand model regresses on view *indicators*, not on the raw string, so
+    # the shim has to speak the same vocabulary. Without this an inventory
+    # carrying `view` is unscorable against a model fitted with view tokens —
+    # `transform_to_design` raises "missing fitted covariates" and the whole
+    # plan fails. Tokens the inventory does not exercise come out zero, which is
+    # correct: a unit with no ocean view has no ocean-view indicator set.
+    if "view_description" in out.columns:
+        from src.data.features import tokenize_multivalue
+
+        block = tokenize_multivalue(out["view_description"], "view")
+        for column in block.columns:
+            out[column] = block[column]
+
     # Every unit in a developer's release pipeline is new construction. This is
     # a definition, not an inference from year_built.
     out["is_new_construction"] = pd.Series(True, index=out.index, dtype="boolean")

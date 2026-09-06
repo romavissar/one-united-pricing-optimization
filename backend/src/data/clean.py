@@ -158,8 +158,13 @@ def clean_mls(df: pd.DataFrame, config: MarketConfig) -> tuple[pd.DataFrame, Cle
     for column, reason in (("is_reo", "reo"), ("is_short_sale", "short_sale")):
         if column not in out.columns:
             continue
+        # `.eq(True)` rather than `.fillna(False).astype(bool)`: the mapped
+        # column is object dtype holding True / False / None, and filling it
+        # triggers pandas' object-downcasting deprecation. Comparing to True
+        # gives the same answer — only an explicit True drops the row, a blank
+        # never does — without the future breakage.
         flag = out[column].map(_is_true_flag)
-        _drop(flag.fillna(False).astype(bool), f"distressed_{reason}")
+        _drop(flag.eq(True), f"distressed_{reason}")
 
     if "property_type" in out.columns or "sale_type" in out.columns:
         rental_mask = out.apply(

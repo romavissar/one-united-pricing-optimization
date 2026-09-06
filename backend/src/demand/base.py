@@ -84,6 +84,10 @@ class DesignMatrix:
     categorical_levels: dict[str, list[str]] = field(default_factory=dict)
     reference_levels: dict[str, str] = field(default_factory=dict)
     dropped_constant: list[str] = field(default_factory=list)
+    # Design columns that were strictly 0/1 at fit time. A scoring frame may
+    # legitimately omit one of these — the attribute is simply absent — and it
+    # is then held at zero rather than raising.
+    binary_columns: set[str] = field(default_factory=set)
     dropped_dependent: list[str] = field(default_factory=list)
     pooled_rare_levels: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
@@ -410,6 +414,14 @@ def build_design_matrix(
             "keeping them gives a singular information matrix and no fit at all."
         )
 
+    # Recorded before scaling: dividing a 0/1 column by its sd leaves values of
+    # 0 and 1/sd, so the check has to happen while the column is still an
+    # indicator.
+    binary = {
+        c for c in matrix.columns
+        if set(pd.unique(matrix[c].to_numpy())) <= {0.0, 1.0}
+    }
+
     scales = {c: 1.0 for c in matrix.columns}
     if scale:
         for column in matrix.columns:
@@ -420,6 +432,7 @@ def build_design_matrix(
 
     return DesignMatrix(
         X=matrix,
+        binary_columns=binary,
         index=index,
         rows_in=rows_in,
         rows_used=len(index),
@@ -481,13 +494,29 @@ def transform_to_design(
     numeric = numeric_columns(design)
     categorical = sorted(set(design.reference_levels))
     missing = [c for c in (*numeric, *categorical) if c not in features.columns]
-    if missing:
-        raise SchemaError(f"Scoring frame is missing fitted covariates: {missing}")
+
+    # An absent *indicator* is a fact, not a gap. A fit that saw nine view
+    # tokens can score an inventory that only exercises three: the six it does
+    # not carry are zero, because the unit does not have that view. Defaulting
+    # them is replaying the fit's vocabulary, the same rule the premium
+    # hedonic's DesignVocabulary follows — not imputation, which is why it is
+    # restricted to columns that were strictly binary in the fitted design.
+    # Anything else missing is still a hard error: a missing `log_floor` is a
+    # gap and must not silently become zero.
+    binary_absent = [
+        c for c in missing
+        if c in design.binary_columns
+    ]
+    hard_missing = [c for c in missing if c not in set(binary_absent)]
+    if hard_missing:
+        raise SchemaError(f"Scoring frame is missing fitted covariates: {hard_missing}")
 
     usable = pd.Series(True, index=features.index)
     encoded = pd.DataFrame(0.0, index=features.index, columns=design.X.columns)
 
     for name in numeric:
+        if name in set(binary_absent):
+            continue  # stays at the 0.0 the frame was initialised with
         values = pd.to_numeric(features[name], errors="coerce")
         usable &= values.notna()
         encoded[name] = values.astype("float64").fillna(0.0)
