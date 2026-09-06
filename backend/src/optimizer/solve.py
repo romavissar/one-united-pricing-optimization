@@ -480,15 +480,33 @@ def _caveats(program: MilpProgram, rows: list[PlanRow], horizon_days: int | None
         )
     if horizon_days:
         months = horizon_days / _DAYS_PER_MONTH_APPROX
-        caveats.append(
-            f"Timing is approximated. P(sale) is the probability of selling within "
-            f"{horizon_days} days ({months:.1f} months), but the whole of a unit's "
-            "expected revenue is discounted to its phase's release date rather than "
-            "to when the cash actually arrives, which is spread across that window. "
-            "Late sales are therefore under-discounted and the objective overstates "
-            "present value by roughly the discount over half the horizon; the bias "
-            "also mildly favours later phases relative to a correct treatment."
-        )
+        if tensor.arrival_discount_factor is None:
+            # No fitted survival curve to integrate against, so the objective
+            # falls back to valuing everything at its phase's release date.
+            caveats.append(
+                f"Timing is approximated. P(sale) is the probability of selling "
+                f"within {horizon_days} days ({months:.1f} months), but the whole of "
+                "a unit's expected revenue is discounted to its phase's release date "
+                "rather than to when the cash actually arrives, which is spread "
+                "across that window. Late sales are therefore under-discounted and "
+                "the objective overstates present value by roughly the discount over "
+                "half the horizon; the bias also mildly favours later phases "
+                "relative to a correct treatment."
+            )
+        else:
+            # Arrival-time discounting is in force. The residual approximation is
+            # the horizon cap, not the release-date shortcut — saying otherwise
+            # contradicts the note the tensor already carries.
+            caveats.append(
+                f"Timing is discounted to expected sale time, integrated against the "
+                f"fitted survival conditional on selling within {horizon_days} days "
+                f"({months:.1f} months) — not to the phase release date. Two "
+                "approximations remain. The horizon is capped at the longest "
+                "follow-up the demand model actually observed, so a sale that would "
+                "arrive later is valued as if it arrived at the cap; and the "
+                "conditional arrival distribution is the fitted one, so it inherits "
+                "whatever the hazard gets wrong."
+            )
     if any(p.cash_flow_floor_usd for p in tensor.phases):
         caveats.append(
             "The cash-flow floor binds on expected revenue, so realized cash flow can "

@@ -655,3 +655,44 @@ def test_uncontrolled_quality_note_sees_tokenized_view(config):
     assert _is_controlled("log_living_area", controlled)
     assert not _is_controlled("building_name", controlled)
     assert not _is_controlled("view_description", {"log_living_area"})
+
+
+# --- F11 follow-on  the timing caveat must describe what the code does -------
+
+
+def test_timing_caveat_tracks_whether_arrival_discounting_applied():
+    """The timing caveat contradicted the tensor's own note.
+
+    F11 moved discounting from the phase release date to expected sale time,
+    but `_caveats` kept emitting the pre-fix text unconditionally. A plan
+    therefore carried both "revenue is discounted to expected sale time" and
+    "expected revenue is discounted to its phase's release date". A reader has
+    no way to tell which is true, which is worse than either alone.
+    """
+    import numpy as np
+
+    from src.optimizer.solve import _caveats
+
+    class _Tensor:
+        notes: list[str] = []
+        phases: tuple = ()
+        n_levels = 3
+        arrival_discount_factor = None
+
+    class _Program:
+        tensor = _Tensor()
+
+    program = _Program()
+    without = _caveats(program, [], horizon_days=180)
+    assert any("phase's release date" in c for c in without)
+    assert not any("expected sale time" in c for c in without)
+
+    _Tensor.arrival_discount_factor = np.ones(3)
+    program.tensor = _Tensor()
+    with_arrival = _caveats(program, [], horizon_days=180)
+    assert any("expected sale time" in c for c in with_arrival)
+    assert not any(
+        "discounted to its phase's release date" in c for c in with_arrival
+    )
+    # the surviving approximation is named, not dropped
+    assert any("capped" in c or "cap" in c for c in with_arrival)
